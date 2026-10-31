@@ -12,40 +12,66 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
-            --hw-primary: #0f172a;      /* Deep Slate */
-            --hw-accent: #0284c7;       /* Engineering Blue */
-            --hw-bg: #f8fafc;           /* Light Surface */
+            --hw-primary: #1e3a5f;      /* Soft Navy, lighter than before */
+            --hw-accent: #3b82c4;       /* Lighter Engineering Blue */
+            --hw-bg: #f4f7fb;           /* Cool Light Grey-Blue Surface */
             --hw-card-bg: #ffffff;
-            --hw-border: #e2e8f0;
-            --hw-text: #334155;
+            --hw-border: #e3e9f1;
+            --hw-text: #3d4b5c;
             --hw-font: 'Inter', sans-serif;
             --hw-code: 'Fira Code', monospace;
         }
         body {
-            background-color: var(--hw-bg);
+            background: linear-gradient(180deg, #f7fafd 0%, #eef2f8 100%) fixed;
             color: var(--hw-text);
             font-family: var(--hw-font);
             font-size: 0.9rem;
         }
         .navbar {
-            background-color: var(--hw-primary);
+            background: linear-gradient(90deg, #1e3a5f 0%, #2d5586 100%);
             color: #fff;
             border-bottom: 3px solid var(--hw-accent);
         }
         .card {
             background: var(--hw-card-bg);
             border: 1px solid var(--hw-border);
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(70,110,160,0.07);
             margin-bottom: 20px;
+            transition: box-shadow 0.2s ease, transform 0.2s ease;
+            animation: hwFadeIn 0.35s ease both;
+        }
+        .card:hover {
+            box-shadow: 0 6px 18px rgba(70,110,160,0.13);
         }
         .card-header {
-            background-color: #f1f5f9;
+            background-color: #eef3fa;
             font-weight: 600;
             border-bottom: 1px solid var(--hw-border);
             color: var(--hw-primary);
             padding: 10px 16px;
+            border-radius: 10px 10px 0 0;
         }
+        @keyframes hwFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes hwRowIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        #auditTableBody tr {
+            animation: hwRowIn 0.3s ease both;
+        }
+        .btn { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+        .btn:active { transform: scale(0.97); }
+        .badge-verified, .badge-mismatch, .badge-notfound {
+            transition: transform 0.15s ease;
+        }
+        .progress-bar { transition: width 0.25s ease; }
+        ::-webkit-scrollbar { height: 8px; width: 8px; }
+        ::-webkit-scrollbar-thumb { background: #c7d6e8; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: #eef3fa; }
         code, .code-text {
             font-family: var(--hw-code);
             background: #f1f5f9;
@@ -63,14 +89,31 @@
 
         .upload-dropzone {
             border: 2px dashed var(--hw-accent);
-            border-radius: 8px;
+            border-radius: 10px;
             padding: 24px 18px;
             text-align: center;
-            background: #f0f9ff;
+            background: #f3f8fe;
             cursor: pointer;
             transition: all 0.2s ease;
         }
-        .upload-dropzone:hover { background: #e0f2fe; }
+        .upload-dropzone:hover { background: #e7f1fc; transform: translateY(-2px); box-shadow: 0 6px 14px rgba(59,130,196,0.15); }
+        .upload-dropzone.dragover { background: #dcecfb; border-color: #1e3a5f; }
+        .quick-chip {
+            display: inline-block;
+            padding: 3px 10px;
+            margin: 2px 4px 2px 0;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border-radius: 20px;
+            border: 1px solid var(--hw-accent);
+            background: #f3f8fe;
+            color: var(--hw-accent);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .quick-chip:hover { background: var(--hw-accent); color: #fff; transform: translateY(-1px); }
+        .quick-chip.active { background: var(--hw-primary); color: #fff; border-color: var(--hw-primary); }
         .cell-mismatch {
             background-color: #fef2f2 !important;
             border-left: 3px solid #ef4444 !important;
@@ -129,8 +172,8 @@
             <div class="text-white-50 small">Live API Priority: 1. DigiKey API v4 &rarr; 2. Mouser Search API v1 &rarr; 3. LCSC / JLCPCB / RS PRO</div>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span class="badge bg-success py-2 px-3">
-                <span id="apiStatusDot" class="api-status-dot dot-active"></span>Team API Keys Active (DigiKey + Mouser)
+            <span id="apiKeyBadge" class="badge bg-warning text-dark py-2 px-3">
+                <span id="apiStatusDot" class="api-status-dot dot-inactive"></span>No API Keys Set - Click the gear icon to add yours
             </span>
             <button class="btn btn-sm btn-outline-secondary text-white border-secondary" onclick="toggleApiConfig()" title="View or Override API Keys">⚙</button>
             <button class="btn btn-sm btn-outline-light" onclick="clearResults()">Reset Workspace</button>
@@ -192,7 +235,14 @@
                             <div class="row g-2">
                                 <div class="col-md-4">
                                     <label class="form-label text-primary">MFG_PN (Part Number)</label>
-                                    <input type="text" id="manMpn" class="form-control form-control-sm" placeholder="e.g., GRM188R71H104KA93D">
+                                    <input type="text" id="manMpn" class="form-control form-control-sm" placeholder="e.g., GRM188R71H104KA93D or STM32F407VGT6">
+                                    <div class="mt-1">
+                                        <span class="quick-chip" onclick="applyQuickCategory('Processor / MCU', this)">CPU / MCU</span>
+                                        <span class="quick-chip" onclick="applyQuickCategory('Memory / RAM', this)">Memory / RAM</span>
+                                        <span class="quick-chip" onclick="applyQuickCategory('FPGA / SoC', this)">FPGA / SoC</span>
+                                        <span class="quick-chip" onclick="applyQuickCategory('Connector', this)">Connector</span>
+                                        <span class="quick-chip" onclick="applyQuickCategory('', this)">Clear</span>
+                                    </div>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">1. Component Type / Category</label>
@@ -338,8 +388,14 @@
                     </div>
                 </div>
 
+                <div id="headerDetectWarning" class="alert alert-warning py-2 px-3 mt-3 d-none" style="font-size:0.8rem;">
+                    No row in the first 60 rows looked like a column header (no MFG_PN / Value / Package style
+                    labels found). Defaulted to Row 1 -- please set <strong>Header Row #</strong> above to the
+                    actual row that holds your column titles, then the mapping below will update automatically.
+                </div>
                 <!-- Live Preview of First 2 Data Rows to Guarantee MFG_PN is Captured -->
                 <div id="liveMapperPreview" class="preview-box mt-3"></div>
+                <div id="zeroRowsWarning" class="alert alert-danger py-2 px-3 mt-2 d-none" style="font-size:0.8rem;"></div>
 
                 <!-- Progress Bar for Bulk BOM Processing -->
                 <div id="bomProgressContainer" class="mt-3 d-none">
@@ -404,9 +460,13 @@
         // =========================================================================
         // 1. HARDCODED TEAM API CREDENTIALS (ZERO-LOGIN FOR ALL COLLEAGUES)
         // =========================================================================
-        const DEFAULT_MOUSER_KEY = "f7821465-5e59-4e6d-be6d-3c90a4dbdcc8";
-        const DEFAULT_DK_CLIENT_ID = "721KJZkRHjwTno2Vzmd5tepqWmUjGoGJyfduHNMJ66tqL2f9";
-        const DEFAULT_DK_CLIENT_SECRET = "TvMmGwNIbvBzyKTvmI8uITeA65m9sEHJug5AjpZK6UFOmBADRDkjOOlI0mhgyICD";
+        // SECURITY: do NOT hardcode real API secrets here -- this file is static client-side
+        // JS and anyone who opens it (or views source) can read these strings directly.
+        // Enter your keys once via the "gear" API Keys panel; they are stored only in this
+        // browser's localStorage and never written back into this file.
+        const DEFAULT_MOUSER_KEY = "";
+        const DEFAULT_DK_CLIENT_ID = "";
+        const DEFAULT_DK_CLIENT_SECRET = "";
         const DEFAULT_LOCALE = "IN:INR";
 
         function getActiveMouserKey() {
@@ -467,19 +527,26 @@
             const dkId = getActiveDkClientId();
             const dot = document.getElementById('apiStatusDot');
             const modeBadge = document.getElementById('apiModeIndicator');
+            const navBadge = document.getElementById('apiKeyBadge');
 
             if (dkId && mKey) {
                 dot.className = 'api-status-dot dot-active';
                 modeBadge.className = 'badge bg-success';
                 modeBadge.innerText = 'Live API Active: DigiKey v4 + Mouser v1';
+                navBadge.className = 'badge bg-success py-2 px-3';
+                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>DigiKey + Mouser Keys Active';
             } else if (mKey) {
                 dot.className = 'api-status-dot dot-active';
                 modeBadge.className = 'badge bg-primary';
                 modeBadge.innerText = 'Live API Active: Mouser v1 + Global Fallback';
+                navBadge.className = 'badge bg-primary py-2 px-3';
+                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>Mouser Key Active';
             } else {
                 dot.className = 'api-status-dot dot-inactive';
                 modeBadge.className = 'badge bg-warning text-dark';
-                modeBadge.innerText = 'Fallback Mode';
+                modeBadge.innerText = 'Fallback Mode (EIA/IEC Decoder + Search Links Only)';
+                navBadge.className = 'badge bg-warning text-dark py-2 px-3';
+                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-inactive"></span>No API Keys Set';
             }
         }
 
@@ -792,6 +859,67 @@
         // =========================================================================
         // 4. PRIORITY 3: GLOBAL SITES (LCSC / JLCPCB / RS PRO) + EIA/IEC DECODER
         // =========================================================================
+        // Best-effort live lookup against LCSC's public search JSON (the same endpoint LCEDA/EasyEDA's
+        // own search box calls -- no official docs, no API key, and the field names below are
+        // reverse-engineered, so this is wrapped in try/catch end-to-end and silently falls through
+        // to the EIA/IEC decoder + a plain search link below if the browser's CORS policy blocks it,
+        // the endpoint is unreachable, or its response shape has changed.
+        async function fetchFromLcscAPI(mpn) {
+            if (!mpn) return null;
+            try {
+                const res = await fetch(`https://pro.lceda.cn/api/szlcsc/eda/product/list?wd=${encodeURIComponent(mpn)}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) return null;
+                const data = await res.json();
+                const list = data.result || data.data || data.list || [];
+                if (!Array.isArray(list) || list.length === 0) return null;
+
+                const pick = (obj, keys) => { for (const k of keys) { if (obj[k]) return obj[k]; } return ''; };
+                const cleanTarget = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+                const normalized = list.map(it => ({
+                    mpn: pick(it, ['mpn', 'productModel', 'title', 'name']),
+                    mfr: pick(it, ['brand', 'manufacturer', 'brandNameEn']),
+                    desc: pick(it, ['describe', 'description', 'desc']),
+                    lcscId: pick(it, ['number', 'lcscNo', 'productCode', 'code']),
+                    raw: it
+                })).filter(it => it.mpn);
+
+                const match = normalized.find(it => it.mpn.toUpperCase().replace(/[^A-Z0-9]/g, '').includes(cleanTarget))
+                    || normalized[0];
+                if (!match || !match.mpn) return null;
+
+                const decoded = decodeStandardMPN(match.mpn, match.desc);
+                return {
+                    found: true,
+                    mpn: match.mpn,
+                    mfr: match.mfr || decoded.mfr || '—',
+                    type: decoded.type !== '—' ? decoded.type : simplifyCategory('', match.desc),
+                    value: decoded.value,
+                    tolerance: decoded.tolerance,
+                    voltage: decoded.voltage,
+                    package: decoded.package,
+                    description: match.desc || decoded.description || '—',
+                    current: decoded.current,
+                    polarity: decoded.polarity,
+                    tempRange: decoded.tempRange,
+                    primarySource: 'LCSC Live Search (unofficial, best-effort)',
+                    badgeClass: 'badge-global',
+                    stock: 'See LCSC listing',
+                    productUrl: match.lcscId
+                        ? `https://www.lcsc.com/product-detail/${encodeURIComponent(match.lcscId)}.html`
+                        : `https://www.lcsc.com/search?q=${encodeURIComponent(match.mpn)}`,
+                    alternates: []
+                };
+            } catch (err) {
+                // Expected on many browsers/networks (CORS, offline, endpoint change) -- silent fallthrough.
+                console.warn("LCSC live search unavailable, falling back to EIA/IEC decoder:", err);
+                return null;
+            }
+        }
+
         function decodeStandardMPN(mpn, descText = "") {
             const cleanMpn = cleanCellString(mpn).toUpperCase();
 
@@ -1016,7 +1144,18 @@
                 return mouserResult;
             }
 
-            // 3. Fallback to Global Distributors (LCSC / JLCPCB / RS PRO) + Verified EIA/IEC Decoder
+            // 3a. Best-effort live LCSC search (unofficial endpoint -- see fetchFromLcscAPI comment)
+            if (mpn) {
+                const lcscResult = await fetchFromLcscAPI(mpn);
+                if (lcscResult && lcscResult.found) {
+                    if (lcscResult.alternates.length === 0) {
+                        lcscResult.alternates = buildStrictVerifiedAlternates(lcscResult);
+                    }
+                    return lcscResult;
+                }
+            }
+
+            // 3b. Fallback to EIA/IEC Decoder (Murata/Samsung/YAGEO/TDK/Vishay/Panasonic part-number schemes)
             const decoded = decodeStandardMPN(mpn, inputData.desc);
             if (decoded.recognized) {
                 const verifiedSpec = {
@@ -1302,13 +1441,51 @@
             reader.readAsArrayBuffer(file);
         });
 
+        // Fills blank cells that sit inside a merged range with the merge's top-left value, so a
+        // merged BOM header (a title banner, a grouped "Designator" cell spanning several rows, etc.)
+        // does not silently turn into empty cells once the sheet is converted to a plain array.
+        function unmergeSheetRows(sheet, rows) {
+            const merges = sheet['!merges'] || [];
+            merges.forEach(range => {
+                const { s, e } = range; // s = {r,c} top-left, e = {r,c} bottom-right
+                if (!rows[s.r]) return;
+                const topLeftVal = rows[s.r][s.c];
+                if (cleanCellString(topLeftVal) === "") return; // nothing to spread
+                for (let r = s.r; r <= e.r; r++) {
+                    if (!rows[r]) rows[r] = [];
+                    for (let c = s.c; c <= e.c; c++) {
+                        if (r === s.r && c === s.c) continue;
+                        if (cleanCellString(rows[r][c]) === "") rows[r][c] = topLeftVal;
+                    }
+                }
+            });
+            return rows;
+        }
+
+        // Scores a candidate header row. Requires at least 2 populated, distinct-looking cells so a
+        // single-cell title/banner row (very common above the real header row) can never win just
+        // because one of its cells happens to contain a generic word like "Description".
+        function scoreHeaderRow(row) {
+            if (!row) return { score: -1, populated: 0 };
+            let score = 0;
+            let populated = 0;
+            row.forEach(cell => {
+                const norm = cleanCellString(cell).toUpperCase().replace(/[^A-Z0-9_]/g, '');
+                if (!norm) return;
+                populated++;
+                if (norm === 'MFG_PN' || norm === 'MFGPN' || norm === 'MPN' || norm.includes('PARTNUMBER') || norm.includes('PARTNO')) score += 10;
+                else if (norm === 'MFG_NAME' || norm === 'MFGNAME' || norm === 'MANUFACTURER' || norm === 'MFG' || norm === 'MFR') score += 8;
+                else if (/VALUE|COMMENT|DESCRIPTION|DESC|PACKAGE|FOOTPRINT|TOLERANCE|VOLTAGE|QTY|QUANTITY|DESIGNATOR|REFDES|CATEGORY/.test(norm)) score += 3;
+            });
+            return { score: populated >= 2 ? score : -1, populated };
+        }
+
         function loadSelectedSheetTab() {
             if (!currentWorkbook) return;
             const sheetIdx = parseInt(document.getElementById('sheetTabSelect').value, 10) || 0;
             const sheetName = currentWorkbook.SheetNames[sheetIdx];
             const sheet = currentWorkbook.Sheets[sheetName];
 
-            // Convert merged cells into populated cells if any exist in the BOM header
             rawSheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
 
             if (rawSheetRows.length === 0) {
@@ -1316,29 +1493,26 @@
                 return;
             }
 
-            // Scan first 35 rows to locate the exact header row containing MFG_PN / MFG_NAME / Value / Package
-            let bestHeaderIdx = 0;
-            let maxScore = -1;
+            // Actually spread merged-cell values (title banners, grouped designator/value cells, etc.)
+            // instead of leaving every cell but the top-left one blank.
+            unmergeSheetRows(sheet, rawSheetRows);
 
-            for (let i = 0; i < Math.min(35, rawSheetRows.length); i++) {
-                const row = rawSheetRows[i];
-                if (!row) continue;
-                let score = 0;
-                row.forEach(cell => {
-                    const norm = cleanCellString(cell).toUpperCase().replace(/[^A-Z0-9_]/g, '');
-                    if (!norm) return;
-                    if (norm === 'MFG_PN' || norm === 'MFGPN' || norm === 'MPN' || norm.includes('PARTNUMBER') || norm.includes('PARTNO')) score += 10;
-                    else if (norm === 'MFG_NAME' || norm === 'MFGNAME' || norm === 'MANUFACTURER' || norm === 'MFG' || norm === 'MFR') score += 8;
-                    else if (/VALUE|COMMENT|DESCRIPTION|DESC|PACKAGE|FOOTPRINT|TOLERANCE|VOLTAGE|QTY|DESIGNATOR|REFDES/.test(norm)) score += 3;
-                });
+            // Scan up to 60 rows to locate the real header row (BOM templates often have a title /
+            // revision banner above the actual MFG_PN / Value / Package column headers).
+            let bestHeaderIdx = -1;
+            let maxScore = 0; // must beat 0, so a row with no recognizable header never "wins" silently
+            for (let i = 0; i < Math.min(60, rawSheetRows.length); i++) {
+                const { score } = scoreHeaderRow(rawSheetRows[i]);
                 if (score > maxScore) {
                     maxScore = score;
                     bestHeaderIdx = i;
                 }
             }
+            if (bestHeaderIdx === -1) bestHeaderIdx = 0; // nothing recognizable anywhere -- fall back to row 1, flagged below
 
             document.getElementById('headerRowIndexInput').value = bestHeaderIdx + 1;
             document.getElementById('columnMapperCard').classList.remove('d-none');
+            document.getElementById('headerDetectWarning').classList.toggle('d-none', maxScore > 0);
             rebuildColumnSelectors();
             processMappedBOM();
         }
@@ -1489,6 +1663,18 @@
             const progContainer = document.getElementById('bomProgressContainer');
             const progBar = document.getElementById('bomProgressBar');
             const progCount = document.getElementById('bomProgressCount');
+            const zeroWarn = document.getElementById('zeroRowsWarning');
+
+            if (rowsToProcess.length === 0) {
+                zeroWarn.classList.remove('d-none');
+                zeroWarn.innerHTML = `<strong>0 component rows detected below Header Row ${headerRowIdx + 1}.</strong> ` +
+                    `This usually means Header Row # is pointing at a title/banner row instead of the real column ` +
+                    `headers, or the MFG_PN / Value / Description columns above are all set to "-- Not in BOM --". ` +
+                    `Adjust Header Row # and the column dropdowns above, then click "Re-Verify BOM Rows".`;
+                document.getElementById('resultsCard').classList.add('d-none');
+                return;
+            }
+            zeroWarn.classList.add('d-none');
             progContainer.classList.remove('d-none');
 
             for (let i = 0; i < rowsToProcess.length; i++) {
@@ -1701,6 +1887,20 @@
 
         function clearManualInputs() {
             document.getElementById('manualForm').reset();
+            document.querySelectorAll('.quick-chip').forEach(c => c.classList.remove('active'));
+        }
+
+        // Quick category chips for unique / hard-to-decode parts (processors, memory, FPGAs, connectors):
+        // these rarely match the EIA/IEC passive-component decoder, so biasing the Type field and the
+        // keyword fallback search toward the right category materially improves DigiKey/Mouser keyword hits.
+        function applyQuickCategory(category, chipEl) {
+            document.querySelectorAll('.quick-chip').forEach(c => c.classList.remove('active'));
+            if (category) {
+                document.getElementById('manType').value = category;
+                chipEl.classList.add('active');
+            } else {
+                document.getElementById('manType').value = '';
+            }
         }
 
         // Export Full 10-Parameter Verified BOM to Excel (.xlsx) with MFG_PN & MFG_NAME headers
