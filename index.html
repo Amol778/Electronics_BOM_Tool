@@ -122,35 +122,35 @@
             <div class="text-white-50 small">Live API Priority: 1. DigiKey API v4 &rarr; 2. Mouser Search API v1 &rarr; 3. LCSC / JLCPCB / RS PRO</div>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-sm btn-warning fw-semibold" onclick="toggleApiConfig()">
-                <span id="apiStatusDot" class="api-status-dot dot-inactive"></span>⚙ Configure Distributor API Keys
-            </button>
+            <span class="badge bg-success py-2 px-3">
+                <span id="apiStatusDot" class="api-status-dot dot-active"></span>Team API Keys Active (DigiKey + Mouser)
+            </span>
+            <button class="btn btn-sm btn-outline-secondary text-white border-secondary" onclick="toggleApiConfig()" title="View or Override API Keys">⚙</button>
             <button class="btn btn-sm btn-outline-light" onclick="clearResults()">Reset Workspace</button>
         </div>
     </nav>
 
     <div class="container-fluid px-4 my-3">
 
-        <!-- COLLAPSIBLE API CREDENTIALS CONFIGURATION PANEL -->
+        <!-- COLLAPSIBLE API CREDENTIALS PANEL (PRE-FILLED & HIDDEN BY DEFAULT) -->
         <div id="apiConfigCard" class="card border-warning d-none mb-3">
             <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
-                <span>🔑 Official Distributor API Credentials (Stored Locally in Your Browser)</span>
+                <span>🔑 Pre-Configured Official Distributor API Credentials</span>
                 <button class="btn-close btn-sm" onclick="toggleApiConfig()"></button>
             </div>
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <label class="form-label">Mouser Search API Key (v1/v2) — <a href="https://www.mouser.in/api-search/" target="_blank">Get Free Key ↗</a></label>
-                        <input type="password" id="cfgMouserKey" class="form-control form-control-sm" placeholder="e.g., 8a4f2c10-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-                        <small class="text-muted" style="font-size:0.72rem;">Works directly in browser without CORS proxy (1,000 req/day).</small>
+                        <label class="form-label">Mouser Search API Key (v1/v2)</label>
+                        <input type="password" id="cfgMouserKey" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">DigiKey Client ID (API v4) — <a href="https://developer.digikey.com/" target="_blank">Developer Portal ↗</a></label>
-                        <input type="text" id="cfgDkClientId" class="form-control form-control-sm" placeholder="DigiKey X-DIGIKEY-Client-Id">
+                        <label class="form-label">DigiKey Client ID (API v4)</label>
+                        <input type="text" id="cfgDkClientId" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">DigiKey Client Secret (OAuth2)</label>
-                        <input type="password" id="cfgDkClientSecret" class="form-control form-control-sm" placeholder="DigiKey Client Secret">
+                        <input type="password" id="cfgDkClientSecret" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Locale / Currency</label>
@@ -162,8 +162,11 @@
                     </div>
                 </div>
                 <div class="d-flex justify-content-between align-items-center mt-3">
-                    <small class="text-muted">Keys are saved strictly in your browser's <code>localStorage</code> and never sent anywhere except official DigiKey/Mouser endpoints.</small>
-                    <button class="btn btn-sm btn-primary fw-semibold" onclick="saveApiConfig()">💾 Save API Keys</button>
+                    <small class="text-muted">Hardcoded team credentials are automatically loaded. Click Restore Defaults to reset to the embedded keys at any time.</small>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-danger" onclick="restoreDefaultKeys()">Restore Hardcoded Keys</button>
+                        <button class="btn btn-sm btn-primary fw-semibold" onclick="saveApiConfig()">💾 Save Overrides</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -253,7 +256,7 @@
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-2">
                             <span id="fileNameDisplay" class="small fw-bold text-success">No file uploaded</span>
-                            <span id="apiModeIndicator" class="badge bg-secondary">API Mode: Checking...</span>
+                            <span id="apiModeIndicator" class="badge bg-success">Live API Active: DigiKey v4 + Mouser v1</span>
                         </div>
                     </div>
                 </div>
@@ -380,13 +383,36 @@
         let dkTokenExpiry = 0;
 
         // =========================================================================
-        // 1. INITIALIZATION & API KEY MANAGEMENT (LOCALSTORAGE)
+        // 1. HARDCODED TEAM API CREDENTIALS (ZERO-LOGIN FOR ALL COLLEAGUES)
         // =========================================================================
+        const DEFAULT_MOUSER_KEY = "f7821465-5e59-4e6d-be6d-3c90a4dbdcc8";
+        const DEFAULT_DK_CLIENT_ID = "721KJZkRHjwTno2Vzmd5tepqWmUjGoGJyfduHNMJ66tqL2f9";
+        const DEFAULT_DK_CLIENT_SECRET = "TvMmGwNIbvBzyKTvmI8uITeA65m9sEHJug5AjpZK6UFOmBADRDkjOOlI0mhgyICD";
+        const DEFAULT_LOCALE = "IN:INR";
+
+        function getActiveMouserKey() {
+            return localStorage.getItem('hw_mouser_key') || DEFAULT_MOUSER_KEY;
+        }
+        function getActiveDkClientId() {
+            return localStorage.getItem('hw_dk_client_id') || DEFAULT_DK_CLIENT_ID;
+        }
+        function getActiveDkClientSecret() {
+            return localStorage.getItem('hw_dk_client_secret') || DEFAULT_DK_CLIENT_SECRET;
+        }
+        function getActiveLocale() {
+            return localStorage.getItem('hw_locale') || DEFAULT_LOCALE;
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('cfgMouserKey').value = localStorage.getItem('hw_mouser_key') || '';
-            document.getElementById('cfgDkClientId').value = localStorage.getItem('hw_dk_client_id') || '';
-            document.getElementById('cfgDkClientSecret').value = localStorage.getItem('hw_dk_client_secret') || '';
-            document.getElementById('cfgLocale').value = localStorage.getItem('hw_locale') || 'IN:INR';
+            if (!localStorage.getItem('hw_mouser_key')) localStorage.setItem('hw_mouser_key', DEFAULT_MOUSER_KEY);
+            if (!localStorage.getItem('hw_dk_client_id')) localStorage.setItem('hw_dk_client_id', DEFAULT_DK_CLIENT_ID);
+            if (!localStorage.getItem('hw_dk_client_secret')) localStorage.setItem('hw_dk_client_secret', DEFAULT_DK_CLIENT_SECRET);
+            if (!localStorage.getItem('hw_locale')) localStorage.setItem('hw_locale', DEFAULT_LOCALE);
+
+            document.getElementById('cfgMouserKey').value = getActiveMouserKey();
+            document.getElementById('cfgDkClientId').value = getActiveDkClientId();
+            document.getElementById('cfgDkClientSecret').value = getActiveDkClientSecret();
+            document.getElementById('cfgLocale').value = getActiveLocale();
             updateApiStatusBadge();
         });
 
@@ -395,18 +421,31 @@
         }
 
         function saveApiConfig() {
-            localStorage.setItem('hw_mouser_key', document.getElementById('cfgMouserKey').value.trim());
-            localStorage.setItem('hw_dk_client_id', document.getElementById('cfgDkClientId').value.trim());
-            localStorage.setItem('hw_dk_client_secret', document.getElementById('cfgDkClientSecret').value.trim());
+            localStorage.setItem('hw_mouser_key', document.getElementById('cfgMouserKey').value.trim() || DEFAULT_MOUSER_KEY);
+            localStorage.setItem('hw_dk_client_id', document.getElementById('cfgDkClientId').value.trim() || DEFAULT_DK_CLIENT_ID);
+            localStorage.setItem('hw_dk_client_secret', document.getElementById('cfgDkClientSecret').value.trim() || DEFAULT_DK_CLIENT_SECRET);
             localStorage.setItem('hw_locale', document.getElementById('cfgLocale').value);
             dkAccessToken = null;
             updateApiStatusBadge();
             toggleApiConfig();
         }
 
+        function restoreDefaultKeys() {
+            localStorage.setItem('hw_mouser_key', DEFAULT_MOUSER_KEY);
+            localStorage.setItem('hw_dk_client_id', DEFAULT_DK_CLIENT_ID);
+            localStorage.setItem('hw_dk_client_secret', DEFAULT_DK_CLIENT_SECRET);
+            localStorage.setItem('hw_locale', DEFAULT_LOCALE);
+            document.getElementById('cfgMouserKey').value = DEFAULT_MOUSER_KEY;
+            document.getElementById('cfgDkClientId').value = DEFAULT_DK_CLIENT_ID;
+            document.getElementById('cfgDkClientSecret').value = DEFAULT_DK_CLIENT_SECRET;
+            document.getElementById('cfgLocale').value = DEFAULT_LOCALE;
+            dkAccessToken = null;
+            updateApiStatusBadge();
+        }
+
         function updateApiStatusBadge() {
-            const mKey = localStorage.getItem('hw_mouser_key');
-            const dkId = localStorage.getItem('hw_dk_client_id');
+            const mKey = getActiveMouserKey();
+            const dkId = getActiveDkClientId();
             const dot = document.getElementById('apiStatusDot');
             const modeBadge = document.getElementById('apiModeIndicator');
 
@@ -418,14 +457,10 @@
                 dot.className = 'api-status-dot dot-active';
                 modeBadge.className = 'badge bg-primary';
                 modeBadge.innerText = 'Live API Active: Mouser v1 + Global Fallback';
-            } else if (dkId) {
-                dot.className = 'api-status-dot dot-active';
-                modeBadge.className = 'badge bg-danger';
-                modeBadge.innerText = 'Live API Active: DigiKey v4 + Global Fallback';
             } else {
                 dot.className = 'api-status-dot dot-inactive';
                 modeBadge.className = 'badge bg-warning text-dark';
-                modeBadge.innerText = 'Strict EIA/IEC Engineering Decoder (Configure API Keys for Live Catalog)';
+                modeBadge.innerText = 'Fallback Mode';
             }
         }
 
@@ -435,11 +470,11 @@
 
         // Priority 1: DigiKey Product Information API v4
         async function fetchFromDigiKeyAPI(mpn) {
-            const clientId = localStorage.getItem('hw_dk_client_id');
-            const clientSecret = localStorage.getItem('hw_dk_client_secret');
+            const clientId = getActiveDkClientId();
+            const clientSecret = getActiveDkClientSecret();
             if (!clientId || !clientSecret || !mpn) return null;
 
-            const [site, currency] = (localStorage.getItem('hw_locale') || 'IN:INR').split(':');
+            const [site, currency] = getActiveLocale().split(':');
 
             try {
                 // Step 1: Obtain OAuth2 Bearer Token if expired
@@ -471,7 +506,7 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json'
                     },
-                    body: JSON.stringify({ Keywords: mpn, RecordCount: 10 })
+                    body: JSON.stringify({ Keywords: mpn, RecordCount: 15 })
                 });
 
                 if (!searchRes.ok) return null;
@@ -479,14 +514,14 @@
                 const products = data.Products || data.ExactMatches || [];
                 if (products.length === 0) return null;
 
-                // Find exact MPN match first
+                // Match exact MPN
                 const exact = products.find(p =>
                     (p.ManufacturerProductNumber || '').toUpperCase() === mpn.toUpperCase()
                 ) || products[0];
 
                 const parsed = parseDigiKeyProduct(exact);
 
-                // Extract strict alternates from other returned products or run a parametric search
+                // Filter strict alternates from returned catalog items
                 const altCandidates = products
                     .filter(p => (p.ManufacturerProductNumber || '').toUpperCase() !== parsed.mpn.toUpperCase())
                     .map(p => parseDigiKeyProduct(p))
@@ -495,7 +530,7 @@
                 parsed.alternates = altCandidates.slice(0, 3);
                 return parsed;
             } catch (err) {
-                console.warn("DigiKey API request failed or blocked by CORS:", err);
+                console.warn("DigiKey API fallback to Mouser:", err);
                 return null;
             }
         }
@@ -513,23 +548,26 @@
                 return key ? params[key] : '';
             };
 
+            const mpn = p.ManufacturerProductNumber || '';
             const category = (p.Category && p.Category.Name) ? p.Category.Name : (getParam(/category|type/) || 'Electronic Component');
             const mfr = (p.Manufacturer && p.Manufacturer.Name) ? p.Manufacturer.Name : 'Verified Mfr';
             const desc = (p.Description && p.Description.DetailedDescription) || (p.Description && p.Description.ProductDescription) || '';
 
-            const rawVal = getParam(/capacitance|resistance|inductance|nominal value|output voltage|frequency/) || extractValueFromText(desc);
-            const rawTol = getParam(/tolerance/) || extractTolFromText(desc);
-            const rawVolt = getParam(/voltage - rated|voltage - max|voltage - breakdown|voltage - input|voltage - supply|voltage/) || extractVoltFromText(desc);
-            const rawPkg = getParam(/package \/ case|supplier device package|size \/ dimension|footprint/) || extractPkgFromText(desc);
-            const rawCurr = getParam(/current - rated|current - max|current - output|current - saturation|power \(watts\)|power/) || extractCurrentFromText(desc);
-            const rawPol = getParam(/polarization|polarity|channel type|configuration/) || inferPolarity(category, desc);
-            const rawTemp = getParam(/operating temperature/) || extractTempFromText(desc);
+            const decoded = decodeStandardMPN(mpn, desc);
+
+            const rawVal = getParam(/capacitance|resistance|inductance|nominal value|output voltage|frequency/) || extractValueFromText(desc) || decoded.value;
+            const rawTol = getParam(/tolerance/) || extractTolFromText(desc) || decoded.tolerance;
+            const rawVolt = getParam(/voltage - rated|voltage - max|voltage - breakdown|voltage - input|voltage - supply|voltage/) || extractVoltFromText(desc) || decoded.voltage;
+            const rawPkg = getParam(/package \/ case|supplier device package|size \/ dimension|footprint/) || extractPkgFromText(desc) || decoded.package;
+            const rawCurr = getParam(/current - rated|current - max|current - output|current - saturation|power \(watts\)|power/) || extractCurrentFromText(desc) || decoded.current;
+            const rawPol = getParam(/polarization|polarity|channel type|configuration/) || inferPolarity(category, desc) || decoded.polarity;
+            const rawTemp = getParam(/operating temperature/) || extractTempFromText(desc) || decoded.tempRange;
 
             return {
                 found: true,
-                mpn: p.ManufacturerProductNumber || '',
+                mpn,
                 mfr,
-                type: simplifyCategory(category, desc),
+                type: simplifyCategory(category, desc) || decoded.type || 'Component',
                 value: rawVal || '—',
                 tolerance: rawTol || '—',
                 voltage: rawVolt || '—',
@@ -541,7 +579,7 @@
                 primarySource: 'DigiKey Official API',
                 badgeClass: 'badge-digikey',
                 stock: p.QuantityAvailable ?? 'Available',
-                productUrl: p.ProductUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(p.ManufacturerProductNumber || '')}`,
+                productUrl: p.ProductUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(mpn)}`,
                 datasheetUrl: p.DatasheetUrl || '',
                 alternates: []
             };
@@ -549,7 +587,7 @@
 
         // Priority 2: Mouser Search API v1 (Works directly from browser via CORS)
         async function fetchFromMouserAPI(mpn, userHints = {}) {
-            const apiKey = localStorage.getItem('hw_mouser_key');
+            const apiKey = getActiveMouserKey();
             if (!apiKey) return null;
 
             try {
@@ -571,7 +609,7 @@
                     }
                 }
 
-                // If partnumber search returned 0 or user searched by parameters only, run keyword search
+                // Fallback to keyword search if exact partnumber returned 0 or if searching by parameters
                 if (parts.length === 0) {
                     const kw = mpn || `${userHints.type || ''} ${userHints.value || ''} ${userHints.package || ''} ${userHints.voltage || ''} ${userHints.tolerance || ''}`.trim();
                     if (!kw) return null;
@@ -594,19 +632,26 @@
 
                 if (parts.length === 0) return null;
 
-                // Match exact MPN if provided
-                const exactPart = mpn
-                    ? (parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase() === mpn.toUpperCase()) || parts[0])
-                    : parts[0];
+                // If MPN was provided, ensure we match the exact MPN or a valid substring match
+                let exactPart = parts[0];
+                if (mpn) {
+                    const cleanTarget = mpn.toUpperCase();
+                    const foundExact = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase() === cleanTarget);
+                    const foundPartial = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase().includes(cleanTarget));
+                    if (foundExact) exactPart = foundExact;
+                    else if (foundPartial) exactPart = foundPartial;
+                    else return null; // Prevent returning an unrelated part if MPN doesn't match
+                }
 
                 const primaryParsed = parseMouserPart(exactPart);
 
-                // Query Mouser Keyword API for strict parametric alternates matching Category + Value + Voltage + Tolerance + Package
+                // Filter strict alternates from returned parts
                 let altCandidates = parts
                     .filter(p => (p.ManufacturerPartNumber || '').toUpperCase() !== primaryParsed.mpn.toUpperCase())
                     .map(p => parseMouserPart(p))
                     .filter(cand => isStrictAlternateMatch(primaryParsed, cand));
 
+                // If no alternates in initial batch, run a targeted Mouser parametric keyword search
                 if (altCandidates.length === 0 && primaryParsed.value !== '—' && primaryParsed.package !== '—') {
                     const altQuery = `${primaryParsed.type} ${primaryParsed.value} ${primaryParsed.package} ${primaryParsed.voltage !== '—' ? primaryParsed.voltage : ''} ${primaryParsed.tolerance !== '—' ? primaryParsed.tolerance : ''}`.trim();
                     const altRes = await fetch(`https://api.mouser.com/api/v1/search/keyword?apiKey=${encodeURIComponent(apiKey)}`, {
@@ -640,13 +685,6 @@
             const mfr = p.Manufacturer || 'Verified Mfr';
             const mpn = p.ManufacturerPartNumber || '';
 
-            // Also inspect ProductAttributes array if returned by Mouser
-            const attrs = {};
-            (p.ProductAttributes || []).forEach(a => {
-                attrs[(a.AttributeName || '').toLowerCase()] = a.AttributeValue || '';
-            });
-
-            // Combine MPN decoding + Description extraction so all 10 parameters are populated accurately
             const decoded = decodeStandardMPN(mpn, desc);
 
             const value = extractValueFromText(desc) || decoded.value || '—';
@@ -673,7 +711,7 @@
                 tempRange,
                 primarySource: 'Mouser Official API',
                 badgeClass: 'badge-mouser',
-                stock: p.Availability || p.AvailabilityInStock || 'Check Web',
+                stock: p.Availability || p.AvailabilityInStock || 'In Catalog',
                 productUrl: p.ProductDetailUrl || `https://www.mouser.in/c/?q=${encodeURIComponent(mpn)}`,
                 datasheetUrl: p.DataSheetUrl || '',
                 alternates: []
@@ -690,12 +728,16 @@
             // 2. Exact Same Value
             if (target.value !== '—' && candidate.value !== '—') {
                 if (normalizeForCompare(target.value) !== normalizeForCompare(candidate.value)) return false;
+            } else {
+                return false;
             }
             // 3. Exact Same Footprint / Package
             if (target.package !== '—' && candidate.package !== '—') {
                 if (normalizeForCompare(target.package) !== normalizeForCompare(candidate.package)) return false;
+            } else {
+                return false;
             }
-            // 4. Compatible Voltage (Equal or safe match)
+            // 4. Compatible Voltage (Equal or higher safe rating)
             if (target.voltage !== '—' && candidate.voltage !== '—') {
                 const vTarget = parseFloat(target.voltage);
                 const vCand = parseFloat(candidate.voltage);
@@ -724,11 +766,9 @@
 
         // =========================================================================
         // 4. PRIORITY 3: GLOBAL SITES (LCSC / JLCPCB / RS PRO) + EIA/IEC DECODER
-        //    (Strictly NEVER invents dummy MPNs or fake links)
         // =========================================================================
         function decodeStandardMPN(mpn, descText = "") {
             const cleanMpn = String(mpn || "").trim().toUpperCase();
-            const combined = `${cleanMpn} ${descText}`.trim();
 
             let recognized = false;
             let type = "";
@@ -851,7 +891,6 @@
                 if (!description) description = `RES SMD ${value} ${tolerance} ${current} ${pkg}`;
             }
 
-            // Extract any explicit parameters present in Description text
             if (descText) {
                 if (!value || value === "—") value = extractValueFromText(descText) || "—";
                 if (!tolerance || tolerance === "—") tolerance = extractTolFromText(descText) || "—";
@@ -880,7 +919,6 @@
             };
         }
 
-        // Strict Real Cross-Reference Builder (Only generates alternates when Category + Value + Voltage + Tolerance + Package are 100% known)
         function buildStrictVerifiedAlternates(spec) {
             if (!spec || !spec.found) return [];
             const { mpn, type, value, voltage, package: pkg, tolerance } = spec;
@@ -1265,7 +1303,6 @@
             const headerRowIdx = Math.max(0, parseInt(document.getElementById('headerRowIndexInput').value, 10) - 1);
             const headerRow = rawSheetRows[headerRowIdx] || [];
 
-            // Count non-empty component rows dynamically (works for 20, 50, 78, 100+ rows)
             let validRows = 0;
             for (let r = headerRowIdx + 1; r < rawSheetRows.length; r++) {
                 if (rawSheetRows[r] && rawSheetRows[r].some(c => String(c).trim() !== "")) validRows++;
@@ -1335,7 +1372,6 @@
 
                 if (!mpn && !value && !desc) continue;
 
-                // Extract inline BOM parameters if user combined them in Value/Description column
                 const inlineText = `${value} ${desc}`;
                 if (!voltage) voltage = extractVoltFromText(inlineText);
                 if (!tolerance) tolerance = extractTolFromText(inlineText);
@@ -1354,7 +1390,7 @@
                 progCount.innerText = `${i + 1} / ${rowsToProcess.length} Rows`;
                 progBar.style.width = `${Math.round(((i + 1) / rowsToProcess.length) * 100)}%`;
                 await verifyAndAppendRow(rowsToProcess[i], false);
-                if (i % 5 === 0 || i === rowsToProcess.length - 1) {
+                if (i % 4 === 0 || i === rowsToProcess.length - 1) {
                     renderAuditTable();
                 }
             }
