@@ -111,6 +111,13 @@
             padding: 8px 10px;
             vertical-align: middle;
         }
+        .preview-box {
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 0.78rem;
+        }
     </style>
 </head>
 <body>
@@ -177,14 +184,14 @@
             <div class="col-lg-7">
                 <div class="card h-100 mb-0">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>Option A: Manual Part Number or 10-Parameter Verification</span>
-                        <span class="badge bg-secondary">Single Component Audit</span>
+                        <span>Option A: Manual Single Component Lookup & Verification</span>
+                        <span class="badge bg-secondary">Independent Single-Part Mode</span>
                     </div>
                     <div class="card-body">
                         <form id="manualForm">
                             <div class="row g-2">
                                 <div class="col-md-4">
-                                    <label class="form-label text-primary">Manufacturer Part Number (MPN)</label>
+                                    <label class="form-label text-primary">MFG_PN (Part Number)</label>
                                     <input type="text" id="manMpn" class="form-control form-control-sm" placeholder="e.g., GRM188R71H104KA93D">
                                 </div>
                                 <div class="col-md-4">
@@ -192,7 +199,7 @@
                                     <input type="text" id="manType" class="form-control form-control-sm" placeholder="e.g., Capacitor, Resistor, IC">
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label">2. Manufacturer</label>
+                                    <label class="form-label">2. MFG_NAME (Manufacturer)</label>
                                     <input type="text" id="manMfr" class="form-control form-control-sm" placeholder="e.g., Murata, YAGEO, TI">
                                 </div>
                                 <div class="col-md-3">
@@ -224,14 +231,15 @@
                                     <input type="text" id="manTemp" class="form-control form-control-sm" placeholder="e.g., -55°C to +125°C">
                                 </div>
                                 <div class="col-md-3">
-                                    <label class="form-label">7. Description / Dielectric</label>
+                                    <label class="form-label">7. Description / Details</label>
                                     <input type="text" id="manDesc" class="form-control form-control-sm" placeholder="e.g., X7R MLCC">
                                 </div>
                             </div>
                             <div class="d-flex gap-2 mt-3">
                                 <button type="submit" id="manualSubmitBtn" class="btn btn-primary btn-sm flex-grow-1 fw-semibold">
-                                    🔍 Fetch Live Official Data & Suggest Strict Alternates
+                                    🔍 Fetch Single Component Details (Switches to Manual Mode & Clears BOM Table)
                                 </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearManualInputs()">Clear Inputs</button>
                             </div>
                         </form>
                     </div>
@@ -243,13 +251,13 @@
                 <div class="card h-100 mb-0">
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <span>Option B: Upload Complete BOM (.xlsx, .xls, .csv)</span>
-                        <span class="badge bg-primary">Any Row Count (10 to 1,000+ Rows)</span>
+                        <span class="badge bg-primary">Auto-Detects MFG_PN & MFG_NAME</span>
                     </div>
                     <div class="card-body d-flex flex-column justify-content-between">
                         <div class="upload-dropzone" onclick="document.getElementById('bomFile').click();">
                             <h6 class="fw-bold mb-1">📂 Drag & Drop or Click to Upload Project BOM</h6>
                             <p class="text-muted small mb-2">
-                                Supports any row count (50, 78, 100+ rows). Automatically detects header rows and maps all 10 parameters for live verification.
+                                Recognizes <code>MFG_PN</code>, <code>MFG_NAME</code>, <code>Value</code>, <code>Package</code>, <code>Voltage</code>, <code>Tolerance</code>, and <code>Description</code> across any number of rows.
                             </p>
                             <input type="file" id="bomFile" class="d-none" accept=".xlsx, .xls, .csv">
                             <button type="button" class="btn btn-sm btn-outline-primary">Browse BOM Spreadsheet</button>
@@ -263,68 +271,76 @@
             </div>
         </div>
 
-        <!-- STEP 2: DIGIKEY MYLISTS-STYLE INTERACTIVE COLUMN MAPPER -->
+        <!-- STEP 2: DIGIKEY MYLISTS-STYLE INTERACTIVE COLUMN MAPPER + LIVE PREVIEW -->
         <div id="columnMapperCard" class="card mapper-card d-none my-3">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                <span>🔗 Map Your BOM Spreadsheet Columns (DigiKey MyLists Style)</span>
+                <span>🔗 Map Your BOM Spreadsheet Columns (Auto-Matched to MFG_PN & MFG_NAME)</span>
                 <span id="detectedRowCountBadge" class="badge bg-light text-dark"></span>
             </div>
             <div class="card-body">
                 <div class="row g-2 align-items-end">
+                    <div class="col-md-2">
+                        <label class="form-label">Worksheet Tab</label>
+                        <select id="sheetTabSelect" class="form-select form-select-sm" onchange="loadSelectedSheetTab()"></select>
+                    </div>
                     <div class="col-md-1">
-                        <label class="form-label">Header Row</label>
+                        <label class="form-label">Header Row #</label>
                         <input type="number" id="headerRowIndexInput" class="form-control form-control-sm" min="1" max="50" value="1" onchange="rebuildColumnSelectors()">
                     </div>
                     <div class="col-md-2">
-                        <label class="form-label text-danger">MPN / Part No *</label>
-                        <select id="mapMpn" class="form-select form-select-sm"></select>
+                        <label class="form-label text-danger fw-bold">MFG_PN (Part No) *</label>
+                        <select id="mapMpn" class="form-select form-select-sm border-danger" onchange="updateColumnPreview()"></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label text-primary fw-bold">MFG_NAME (Manufacturer)</label>
+                        <select id="mapMfr" class="form-select form-select-sm border-primary" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Category / Type</label>
-                        <select id="mapType" class="form-select form-select-sm"></select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Manufacturer</label>
-                        <select id="mapMfr" class="form-select form-select-sm"></select>
+                        <select id="mapType" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Value / Comment</label>
-                        <select id="mapValue" class="form-select form-select-sm"></select>
+                        <select id="mapValue" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-1">
                         <label class="form-label">Tolerance</label>
-                        <select id="mapTolerance" class="form-select form-select-sm"></select>
+                        <select id="mapTolerance" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Voltage Rating</label>
-                        <select id="mapVoltage" class="form-select form-select-sm"></select>
+                        <select id="mapVoltage" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Footprint / Package</label>
-                        <select id="mapPackage" class="form-select form-select-sm"></select>
+                        <select id="mapPackage" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Description / Details</label>
-                        <select id="mapDesc" class="form-select form-select-sm"></select>
+                        <select id="mapDesc" class="form-select form-select-sm" onchange="updateColumnPreview()"></select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Current / Power</label>
                         <select id="mapCurrent" class="form-select form-select-sm"></select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <label class="form-label">Polarity</label>
                         <select id="mapPolarity" class="form-select form-select-sm"></select>
                     </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Temp Range</label>
+                    <div class="col-md-1">
+                        <label class="form-label">Temp</label>
                         <select id="mapTemp" class="form-select form-select-sm"></select>
                     </div>
                     <div class="col-md-2">
                         <button id="runBulkVerifyBtn" class="btn btn-success btn-sm w-100 fw-bold" onclick="processMappedBOM()">
-                            ⚡ Verify All BOM Rows
+                            ⚡ Re-Verify BOM Rows
                         </button>
                     </div>
                 </div>
+
+                <!-- Live Preview of First 2 Data Rows to Guarantee MFG_PN is Captured -->
+                <div id="liveMapperPreview" class="preview-box mt-3"></div>
+
                 <!-- Progress Bar for Bulk BOM Processing -->
                 <div id="bomProgressContainer" class="mt-3 d-none">
                     <div class="d-flex justify-content-between small mb-1">
@@ -342,12 +358,12 @@
         <div id="resultsCard" class="card d-none mt-3">
             <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div>
-                    <span>10-Parameter Cross-Verification & Official Alternate Sourcing Report</span>
+                    <span id="resultsModeTitle">10-Parameter Cross-Verification & Official Alternate Sourcing Report</span>
                     <span id="summaryCounters" class="ms-2 badge bg-dark"></span>
                 </div>
                 <div class="d-flex gap-2">
                     <button class="btn btn-sm btn-success fw-semibold" onclick="exportCleanedBOM()">
-                        📥 Export Full 10-Parameter Verified BOM (.xlsx)
+                        📥 Export Full Verified Report (.xlsx)
                     </button>
                 </div>
             </div>
@@ -357,13 +373,13 @@
                         <thead class="table-light">
                             <tr>
                                 <th>#</th>
-                                <th style="min-width:190px;">MPN & Official Source Link</th>
-                                <th>1. Category &<br>2. Manufacturer</th>
+                                <th style="min-width:195px;">MFG_PN & Official Source Link</th>
+                                <th>1. Category &<br>2. MFG_NAME</th>
                                 <th>3. Value<br><small class="text-muted fw-normal">(Provided vs Web)</small></th>
                                 <th>4. Tolerance<br><small class="text-muted fw-normal">(Provided vs Web)</small></th>
                                 <th>5. Voltage<br><small class="text-muted fw-normal">(Provided vs Web)</small></th>
                                 <th>6. Package/Case<br><small class="text-muted fw-normal">(Provided vs Web)</small></th>
-                                <th style="min-width:160px;">7. Description / Details</th>
+                                <th style="min-width:165px;">7. Description / Details</th>
                                 <th>8. Current / Power<br>9. Polarity<br>10. Temp Range</th>
                                 <th style="min-width:150px;">Audit Status &<br>Highlighted Mistakes</th>
                                 <th style="min-width:260px;">Verified Alternates<br><small class="text-muted fw-normal">(Strict: Type+Val+Volt+Tol+Pkg)</small></th>
@@ -377,8 +393,11 @@
     </div>
 
     <script>
+        let currentWorkbook = null;
         let rawSheetRows = [];
         let currentAuditData = [];
+        let currentMode = "NONE"; // "MANUAL" or "BOM"
+        let activeBomJobId = 0;   // Cancels running BOM loop if user switches to Manual Lookup
         let dkAccessToken = null;
         let dkTokenExpiry = 0;
 
@@ -464,6 +483,15 @@
             }
         }
 
+        // Clean invisible characters, line breaks, and non-breaking spaces from Excel cells
+        function cleanCellString(val) {
+            if (val === undefined || val === null) return "";
+            return String(val)
+                .replace(/[\r\n\t]+/g, ' ')
+                .replace(/\u00A0/g, ' ')
+                .trim();
+        }
+
         // =========================================================================
         // 2. LIVE DISTRIBUTOR API CLIENTS (DIGIKEY V4 -> MOUSER V1 -> LCSC/RS PRO)
         // =========================================================================
@@ -477,7 +505,6 @@
             const [site, currency] = getActiveLocale().split(':');
 
             try {
-                // Step 1: Obtain OAuth2 Bearer Token if expired
                 if (!dkAccessToken || Date.now() >= dkTokenExpiry) {
                     const tokenRes = await fetch('https://api.digikey.com/v1/oauth2/token', {
                         method: 'POST',
@@ -494,7 +521,6 @@
                     dkTokenExpiry = Date.now() + ((tokenData.expires_in || 599) - 30) * 1000;
                 }
 
-                // Step 2: Keyword Search on DigiKey API v4 for exact MPN
                 const searchRes = await fetch('https://api.digikey.com/products/v4/search/keyword', {
                     method: 'POST',
                     headers: {
@@ -514,14 +540,17 @@
                 const products = data.Products || data.ExactMatches || [];
                 if (products.length === 0) return null;
 
-                // Match exact MPN
+                const cleanTarget = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
                 const exact = products.find(p =>
-                    (p.ManufacturerProductNumber || '').toUpperCase() === mpn.toUpperCase()
-                ) || products[0];
+                    (p.ManufacturerProductNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanTarget
+                ) || products.find(p =>
+                    (p.ManufacturerProductNumber || '').toUpperCase().includes(mpn.toUpperCase())
+                );
+
+                if (!exact) return null;
 
                 const parsed = parseDigiKeyProduct(exact);
 
-                // Filter strict alternates from returned catalog items
                 const altCandidates = products
                     .filter(p => (p.ManufacturerProductNumber || '').toUpperCase() !== parsed.mpn.toUpperCase())
                     .map(p => parseDigiKeyProduct(p))
@@ -585,7 +614,7 @@
             };
         }
 
-        // Priority 2: Mouser Search API v1 (Works directly from browser via CORS)
+        // Priority 2: Mouser Search API v1 (Fixed partSearchOptions to "None" for accurate MFG_PN matching)
         async function fetchFromMouserAPI(mpn, userHints = {}) {
             const apiKey = getActiveMouserKey();
             if (!apiKey) return null;
@@ -599,7 +628,7 @@
                         body: JSON.stringify({
                             SearchByPartRequest: {
                                 mouserPartNumber: mpn,
-                                partSearchOptions: "Exact"
+                                partSearchOptions: "None"
                             }
                         })
                     });
@@ -609,7 +638,7 @@
                     }
                 }
 
-                // Fallback to keyword search if exact partnumber returned 0 or if searching by parameters
+                // Fallback to keyword search if partnumber search returned 0 or if searching by parameters
                 if (parts.length === 0) {
                     const kw = mpn || `${userHints.type || ''} ${userHints.value || ''} ${userHints.package || ''} ${userHints.voltage || ''} ${userHints.tolerance || ''}`.trim();
                     if (!kw) return null;
@@ -632,26 +661,27 @@
 
                 if (parts.length === 0) return null;
 
-                // If MPN was provided, ensure we match the exact MPN or a valid substring match
+                // Match MFG_PN accurately (ignoring formatting symbols like dashes/spaces)
                 let exactPart = parts[0];
                 if (mpn) {
-                    const cleanTarget = mpn.toUpperCase();
-                    const foundExact = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase() === cleanTarget);
-                    const foundPartial = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase().includes(cleanTarget));
+                    const cleanTarget = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    const foundExact = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === cleanTarget);
+                    const foundPartial = parts.find(p => {
+                        const cand = (p.ManufacturerPartNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        return cand.includes(cleanTarget) || cleanTarget.includes(cand);
+                    });
                     if (foundExact) exactPart = foundExact;
                     else if (foundPartial) exactPart = foundPartial;
-                    else return null; // Prevent returning an unrelated part if MPN doesn't match
+                    else return null;
                 }
 
                 const primaryParsed = parseMouserPart(exactPart);
 
-                // Filter strict alternates from returned parts
                 let altCandidates = parts
                     .filter(p => (p.ManufacturerPartNumber || '').toUpperCase() !== primaryParsed.mpn.toUpperCase())
                     .map(p => parseMouserPart(p))
                     .filter(cand => isStrictAlternateMatch(primaryParsed, cand));
 
-                // If no alternates in initial batch, run a targeted Mouser parametric keyword search
                 if (altCandidates.length === 0 && primaryParsed.value !== '—' && primaryParsed.package !== '—') {
                     const altQuery = `${primaryParsed.type} ${primaryParsed.value} ${primaryParsed.package} ${primaryParsed.voltage !== '—' ? primaryParsed.voltage : ''} ${primaryParsed.tolerance !== '—' ? primaryParsed.tolerance : ''}`.trim();
                     const altRes = await fetch(`https://api.mouser.com/api/v1/search/keyword?apiKey=${encodeURIComponent(apiKey)}`, {
@@ -723,27 +753,22 @@
         // =========================================================================
         function isStrictAlternateMatch(target, candidate) {
             if (!candidate || !candidate.mpn) return false;
-            // 1. Same Component Type / Category
             if (normalizeCategory(target.type) !== normalizeCategory(candidate.type)) return false;
-            // 2. Exact Same Value
             if (target.value !== '—' && candidate.value !== '—') {
                 if (normalizeForCompare(target.value) !== normalizeForCompare(candidate.value)) return false;
             } else {
                 return false;
             }
-            // 3. Exact Same Footprint / Package
             if (target.package !== '—' && candidate.package !== '—') {
                 if (normalizeForCompare(target.package) !== normalizeForCompare(candidate.package)) return false;
             } else {
                 return false;
             }
-            // 4. Compatible Voltage (Equal or higher safe rating)
             if (target.voltage !== '—' && candidate.voltage !== '—') {
                 const vTarget = parseFloat(target.voltage);
                 const vCand = parseFloat(candidate.voltage);
                 if (!isNaN(vTarget) && !isNaN(vCand) && vCand < vTarget) return false;
             }
-            // 5. Compatible Tolerance (Equal or tighter)
             if (target.tolerance !== '—' && candidate.tolerance !== '—') {
                 const tTarget = parseFloat(target.tolerance.replace(/[^\d.]/g, ''));
                 const tCand = parseFloat(candidate.tolerance.replace(/[^\d.]/g, ''));
@@ -768,7 +793,7 @@
         // 4. PRIORITY 3: GLOBAL SITES (LCSC / JLCPCB / RS PRO) + EIA/IEC DECODER
         // =========================================================================
         function decodeStandardMPN(mpn, descText = "") {
-            const cleanMpn = String(mpn || "").trim().toUpperCase();
+            const cleanMpn = cleanCellString(mpn).toUpperCase();
 
             let recognized = false;
             let type = "";
@@ -969,7 +994,7 @@
 
         // Master Orchestrator: DigiKey API -> Mouser API -> Verified Global / EIA Decoder -> Strict Not-Found
         async function resolveComponentData(inputData) {
-            const mpn = (inputData.mpn || "").trim();
+            const mpn = cleanCellString(inputData.mpn);
 
             // 1. Try Official DigiKey API v4 first
             if (mpn) {
@@ -997,7 +1022,7 @@
                 const verifiedSpec = {
                     found: true,
                     mpn: decoded.mpn || mpn,
-                    mfr: decoded.mfr,
+                    mfr: decoded.mfr !== "—" ? decoded.mfr : (inputData.mfr || "—"),
                     type: decoded.type,
                     value: decoded.value,
                     tolerance: decoded.tolerance,
@@ -1020,14 +1045,14 @@
             // 4. STRICT NO-DUMMY RULE: If part is not found and cannot be verified, DO NOT fabricate specs or links!
             return {
                 found: false,
-                mpn: mpn || "UNSPECIFIED",
-                mfr: "—",
-                type: "—",
+                mpn: mpn || "MISSING MFG_PN",
+                mfr: inputData.mfr || "—",
+                type: inputData.type || "—",
                 value: "—",
                 tolerance: "—",
                 voltage: "—",
                 package: "—",
-                description: "Part not found in DigiKey/Mouser API or standard EIA database.",
+                description: mpn ? `Part "${mpn}" not found in DigiKey/Mouser API or standard EIA database.` : "No MFG_PN found in mapped column for this row.",
                 current: "—",
                 polarity: "—",
                 tempRange: "—",
@@ -1221,7 +1246,7 @@
         }
 
         function compareField(userVal, webVal, label, isPartFound, mismatches) {
-            const cleanUser = String(userVal || "").trim();
+            const cleanUser = cleanCellString(userVal);
             if (!isPartFound) {
                 return {
                     isMismatch: false,
@@ -1254,96 +1279,174 @@
         }
 
         // =========================================================================
-        // 6. DYNAMIC VARIABLE-LENGTH EXCEL BOM PARSER (ANY NUMBER OF ROWS)
+        // 6.PRECISION EXCEL BOM PARSER (STRICT MFG_PN & MFG_NAME DETECTION)
         // =========================================================================
         document.getElementById('bomFile').addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            document.getElementById('fileNameDisplay').innerText = `Loaded: ${file.name}`;
+            document.getElementById('fileNameDisplay').innerText = `Loaded BOM: ${file.name}`;
 
             const reader = new FileReader();
             reader.onload = function(evt) {
                 const data = new Uint8Array(evt.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheet = workbook.SheetNames[0];
-                rawSheetRows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { header: 1, defval: "" });
+                currentWorkbook = XLSX.read(data, { type: 'array' });
 
-                if (rawSheetRows.length === 0) {
-                    alert("The uploaded Excel file is empty.");
-                    return;
-                }
+                const tabSelect = document.getElementById('sheetTabSelect');
+                tabSelect.innerHTML = '';
+                currentWorkbook.SheetNames.forEach((name, idx) => {
+                    tabSelect.innerHTML += `<option value="${idx}">${name}</option>`;
+                });
 
-                // Automatically scan first 30 rows to locate the true BOM header row
-                let bestHeaderIdx = 0;
-                let maxScore = -1;
-                const headerRegex = /mpn|part|mfg|manufacturer|value|comment|description|desc|footprint|package|case|designator|refdes|qty|quantity|volt|tolerance|current|polarity|temp/i;
-
-                for (let i = 0; i < Math.min(30, rawSheetRows.length); i++) {
-                    const row = rawSheetRows[i];
-                    let score = 0;
-                    row.forEach(cell => {
-                        if (cell && headerRegex.test(String(cell))) score += 2;
-                        else if (cell && String(cell).trim().length > 0) score += 0.3;
-                    });
-                    if (score > maxScore) {
-                        maxScore = score;
-                        bestHeaderIdx = i;
-                    }
-                }
-
-                document.getElementById('headerRowIndexInput').value = bestHeaderIdx + 1;
-                document.getElementById('columnMapperCard').classList.remove('d-none');
-                rebuildColumnSelectors();
-                processMappedBOM();
+                loadSelectedSheetTab();
             };
             reader.readAsArrayBuffer(file);
         });
 
+        function loadSelectedSheetTab() {
+            if (!currentWorkbook) return;
+            const sheetIdx = parseInt(document.getElementById('sheetTabSelect').value, 10) || 0;
+            const sheetName = currentWorkbook.SheetNames[sheetIdx];
+            const sheet = currentWorkbook.Sheets[sheetName];
+
+            // Convert merged cells into populated cells if any exist in the BOM header
+            rawSheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+
+            if (rawSheetRows.length === 0) {
+                alert("The selected worksheet tab is empty.");
+                return;
+            }
+
+            // Scan first 35 rows to locate the exact header row containing MFG_PN / MFG_NAME / Value / Package
+            let bestHeaderIdx = 0;
+            let maxScore = -1;
+
+            for (let i = 0; i < Math.min(35, rawSheetRows.length); i++) {
+                const row = rawSheetRows[i];
+                if (!row) continue;
+                let score = 0;
+                row.forEach(cell => {
+                    const norm = cleanCellString(cell).toUpperCase().replace(/[^A-Z0-9_]/g, '');
+                    if (!norm) return;
+                    if (norm === 'MFG_PN' || norm === 'MFGPN' || norm === 'MPN' || norm.includes('PARTNUMBER') || norm.includes('PARTNO')) score += 10;
+                    else if (norm === 'MFG_NAME' || norm === 'MFGNAME' || norm === 'MANUFACTURER' || norm === 'MFG' || norm === 'MFR') score += 8;
+                    else if (/VALUE|COMMENT|DESCRIPTION|DESC|PACKAGE|FOOTPRINT|TOLERANCE|VOLTAGE|QTY|DESIGNATOR|REFDES/.test(norm)) score += 3;
+                });
+                if (score > maxScore) {
+                    maxScore = score;
+                    bestHeaderIdx = i;
+                }
+            }
+
+            document.getElementById('headerRowIndexInput').value = bestHeaderIdx + 1;
+            document.getElementById('columnMapperCard').classList.remove('d-none');
+            rebuildColumnSelectors();
+            processMappedBOM();
+        }
+
         function rebuildColumnSelectors() {
             const headerRowIdx = Math.max(0, parseInt(document.getElementById('headerRowIndexInput').value, 10) - 1);
             const headerRow = rawSheetRows[headerRowIdx] || [];
+            const firstDataRow = rawSheetRows[headerRowIdx + 1] || [];
 
             let validRows = 0;
             for (let r = headerRowIdx + 1; r < rawSheetRows.length; r++) {
-                if (rawSheetRows[r] && rawSheetRows[r].some(c => String(c).trim() !== "")) validRows++;
+                if (rawSheetRows[r] && rawSheetRows[r].some(c => cleanCellString(c) !== "")) validRows++;
             }
-            document.getElementById('detectedRowCountBadge').innerText = `${validRows} Component Rows Detected in BOM`;
+            document.getElementById('detectedRowCountBadge').innerText = `${validRows} Component Rows Detected`;
 
-            const selectIds = ['mapMpn', 'mapType', 'mapMfr', 'mapValue', 'mapTolerance', 'mapVoltage', 'mapPackage', 'mapDesc', 'mapCurrent', 'mapPolarity', 'mapTemp'];
+            const selectIds = ['mapMpn', 'mapMfr', 'mapType', 'mapValue', 'mapTolerance', 'mapVoltage', 'mapPackage', 'mapDesc', 'mapCurrent', 'mapPolarity', 'mapTemp'];
             selectIds.forEach(id => {
                 const sel = document.getElementById(id);
                 sel.innerHTML = `<option value="-1">-- Not in BOM --</option>`;
                 headerRow.forEach((colName, idx) => {
-                    const label = String(colName || `Col ${idx + 1}`).trim();
-                    sel.innerHTML += `<option value="${idx}">Col ${idx + 1}: ${label}</option>`;
+                    const cleanName = cleanCellString(colName) || `Col ${idx + 1}`;
+                    const sampleVal = cleanCellString(firstDataRow[idx]);
+                    const samplePreview = sampleVal ? ` (e.g., "${sampleVal.slice(0, 18)}")` : '';
+                    sel.innerHTML += `<option value="${idx}">${cleanName}${samplePreview}</option>`;
                 });
             });
 
-            const autoPick = (id, regex) => {
-                const idx = headerRow.findIndex(c => regex.test(String(c).trim()));
-                if (idx !== -1) document.getElementById(id).value = idx;
+            // Normalized header matching (strips underscores, spaces, and punctuation for exact comparison)
+            const normHeaders = headerRow.map(h => cleanCellString(h).toUpperCase().replace(/[^A-Z0-9]/g, ''));
+
+            const pickBestColumn = (selectId, exactMatches, partialRegex, excludeRegex = null) => {
+                // 1. Check exact normalized header names first (e.g. MFG_PN -> MFGPN)
+                let idx = normHeaders.findIndex(nh => exactMatches.includes(nh));
+                // 2. Fallback to partial regex (excluding conflicting columns like MFG_NAME when searching for MFG_PN)
+                if (idx === -1 && partialRegex) {
+                    idx = headerRow.findIndex((rawH, i) => {
+                        const s = cleanCellString(rawH);
+                        if (!s) return false;
+                        if (excludeRegex && excludeRegex.test(s)) return false;
+                        return partialRegex.test(s);
+                    });
+                }
+                if (idx !== -1) {
+                    document.getElementById(selectId).value = idx;
+                }
             };
 
-            autoPick('mapMpn', /mpn|mfg.*part|manuf.*part|part\s*number|part\s*no|p\/n/i);
-            autoPick('mapType', /category|type|component\s*type|class/i);
-            autoPick('mapMfr', /^mfg$|^mfr$|manufacturer|vendor|brand/i);
-            autoPick('mapValue', /^value$|^val$|comment|capacitance|resistance/i);
-            autoPick('mapTolerance', /^tol|tolerance/i);
-            autoPick('mapVoltage', /^volt|voltage|vdc|rating/i);
-            autoPick('mapPackage', /package|footprint|case|size/i);
-            autoPick('mapDesc', /^desc|description|details|specification/i);
-            autoPick('mapCurrent', /current|power|watt|amp/i);
-            autoPick('mapPolarity', /polarity|channel/i);
-            autoPick('mapTemp', /temp|temperature/i);
+            // Strictly separate MFG_PN and MFG_NAME so they never collide!
+            pickBestColumn('mapMpn', ['MFGPN', 'MPN', 'MANUFACTURERPARTNUMBER', 'MFGPARTNUMBER', 'MFGPARTNO', 'PARTNUMBER', 'PARTNO', 'PN'], /mfg[_\s-]*p\/?n|mpn|part[_\s-]*(number|no|num)|p\/n/i, /name|vendor|mfr_name|mfg_name/i);
+            pickBestColumn('mapMfr', ['MFGNAME', 'MFRNAME', 'MANUFACTURER', 'MANUFACTURERNAME', 'MFG', 'MFR', 'VENDOR', 'BRAND'], /mfg[_\s-]*name|mfr[_\s-]*name|manufacturer|vendor|brand|^mfg$|^mfr$/i, /pn|part|number|no/i);
+            pickBestColumn('mapType', ['CATEGORY', 'COMPONENTTYPE', 'TYPE', 'PARTTYPE', 'CLASS'], /category|component[_\s-]*type|^type$/i);
+            pickBestColumn('mapValue', ['VALUE', 'VAL', 'COMMENT', 'CAPACITANCE', 'RESISTANCE'], /^value$|^val$|comment|capacitance|resistance/i);
+            pickBestColumn('mapTolerance', ['TOLERANCE', 'TOL'], /^tol|tolerance/i);
+            pickBestColumn('mapVoltage', ['VOLTAGE', 'VOLT', 'RATEDVOLTAGE', 'VDC', 'RATING'], /^volt|voltage|vdc|vwv/i);
+            pickBestColumn('mapPackage', ['PACKAGE', 'FOOTPRINT', 'CASE', 'PCBFOOTPRINT', 'SIZE', 'CASEPACKAGE'], /package|footprint|case|size/i);
+            pickBestColumn('mapDesc', ['DESCRIPTION', 'DESC', 'DETAILS', 'SPECIFICATION'], /^desc|description|detail|spec/i);
+            pickBestColumn('mapCurrent', ['CURRENT', 'POWER', 'WATTS', 'CURRENTRATING', 'POWERRATING'], /current|power|watt|amp/i);
+            pickBestColumn('mapPolarity', ['POLARITY', 'CHANNEL'], /polarity|channel/i);
+            pickBestColumn('mapTemp', ['TEMPERATURERANGE', 'TEMPERATURE', 'TEMP', 'OPERATINGTEMP'], /temp|temperature/i);
+
+            updateColumnPreview();
+        }
+
+        // Displays the first 2 rows of mapped data right inside the mapper card so the user sees exact MFG_PN & MFG_NAME values
+        function updateColumnPreview() {
+            const headerRowIdx = Math.max(0, parseInt(document.getElementById('headerRowIndexInput').value, 10) - 1);
+            const mpnIdx = parseInt(document.getElementById('mapMpn').value, 10);
+            const mfrIdx = parseInt(document.getElementById('mapMfr').value, 10);
+            const valIdx = parseInt(document.getElementById('mapValue').value, 10);
+            const pkgIdx = parseInt(document.getElementById('mapPackage').value, 10);
+
+            const sampleRows = [];
+            for (let r = headerRowIdx + 1; r < rawSheetRows.length && sampleRows.length < 2; r++) {
+                const row = rawSheetRows[r];
+                if (!row || row.every(c => cleanCellString(c) === "")) continue;
+                sampleRows.push({
+                    excelRow: r + 1,
+                    mpn: mpnIdx >= 0 ? cleanCellString(row[mpnIdx]) : "(Unmapped)",
+                    mfr: mfrIdx >= 0 ? cleanCellString(row[mfrIdx]) : "(Unmapped)",
+                    val: valIdx >= 0 ? cleanCellString(row[valIdx]) : "(Unmapped)",
+                    pkg: pkgIdx >= 0 ? cleanCellString(row[pkgIdx]) : "(Unmapped)"
+                });
+            }
+
+            const previewEl = document.getElementById('liveMapperPreview');
+            if (sampleRows.length === 0) {
+                previewEl.innerHTML = `<span class="text-danger fw-bold">⚠ No component rows found below Header Row ${headerRowIdx + 1}. Adjust Header Row # above.</span>`;
+                return;
+            }
+
+            previewEl.innerHTML = `<div class="fw-bold text-dark mb-1">✔ Live Mapped Data Preview (Confirming MFG_PN & MFG_NAME Extraction):</div>` +
+                sampleRows.map(sr =>
+                    `<div class="text-muted">Row ${sr.excelRow} &rarr; <strong>MFG_PN:</strong> <code>${sr.mpn || 'EMPTY'}</code> | <strong>MFG_NAME:</strong> <code>${sr.mfr || '—'}</code> | <strong>Value:</strong> <code>${sr.val || '—'}</code> | <strong>Package:</strong> <code>${sr.pkg || '—'}</code></div>`
+                ).join('');
         }
 
         async function processMappedBOM() {
+            currentMode = "BOM";
+            const myJobId = ++activeBomJobId;
+
+            document.getElementById('resultsModeTitle').innerText = "Bulk BOM 10-Parameter Cross-Verification & Alternate Sourcing Report";
+
             const headerRowIdx = Math.max(0, parseInt(document.getElementById('headerRowIndexInput').value, 10) - 1);
             const getIdx = (id) => parseInt(document.getElementById(id).value, 10);
 
             const mpnIdx = getIdx('mapMpn');
-            const typeIdx = getIdx('mapType');
             const mfrIdx = getIdx('mapMfr');
+            const typeIdx = getIdx('mapType');
             const valIdx = getIdx('mapValue');
             const tolIdx = getIdx('mapTolerance');
             const voltIdx = getIdx('mapVoltage');
@@ -1356,28 +1459,30 @@
             const rowsToProcess = [];
             for (let r = headerRowIdx + 1; r < rawSheetRows.length; r++) {
                 const row = rawSheetRows[r];
-                if (!row || row.every(c => String(c).trim() === "")) continue;
+                if (!row || row.every(c => cleanCellString(c) === "")) continue;
 
-                const mpn = mpnIdx >= 0 ? String(row[mpnIdx] || "").trim() : "";
-                const type = typeIdx >= 0 ? String(row[typeIdx] || "").trim() : "";
-                const mfr = mfrIdx >= 0 ? String(row[mfrIdx] || "").trim() : "";
-                const value = valIdx >= 0 ? String(row[valIdx] || "").trim() : "";
-                let tolerance = tolIdx >= 0 ? String(row[tolIdx] || "").trim() : "";
-                let voltage = voltIdx >= 0 ? String(row[voltIdx] || "").trim() : "";
-                let pkg = pkgIdx >= 0 ? String(row[pkgIdx] || "").trim() : "";
-                const desc = descIdx >= 0 ? String(row[descIdx] || "").trim() : "";
-                const current = currIdx >= 0 ? String(row[currIdx] || "").trim() : "";
-                const polarity = polIdx >= 0 ? String(row[polIdx] || "").trim() : "";
-                const tempRange = tempIdx >= 0 ? String(row[tempIdx] || "").trim() : "";
+                let mpn = mpnIdx >= 0 ? cleanCellString(row[mpnIdx]) : "";
+                const mfr = mfrIdx >= 0 ? cleanCellString(row[mfrIdx]) : "";
+                const type = typeIdx >= 0 ? cleanCellString(row[typeIdx]) : "";
+                const value = valIdx >= 0 ? cleanCellString(row[valIdx]) : "";
+                let tolerance = tolIdx >= 0 ? cleanCellString(row[tolIdx]) : "";
+                let voltage = voltIdx >= 0 ? cleanCellString(row[voltIdx]) : "";
+                let pkg = pkgIdx >= 0 ? cleanCellString(row[pkgIdx]) : "";
+                const desc = descIdx >= 0 ? cleanCellString(row[descIdx]) : "";
+                const current = currIdx >= 0 ? cleanCellString(row[currIdx]) : "";
+                const polarity = polIdx >= 0 ? cleanCellString(row[polIdx]) : "";
+                const tempRange = tempIdx >= 0 ? cleanCellString(row[tempIdx]) : "";
 
+                // Skip section divider rows or DNP rows without valid component data
                 if (!mpn && !value && !desc) continue;
+                if (/^(dnp|do not populate|none|n\/a|-)$/i.test(mpn) && !value) continue;
 
                 const inlineText = `${value} ${desc}`;
                 if (!voltage) voltage = extractVoltFromText(inlineText);
                 if (!tolerance) tolerance = extractTolFromText(inlineText);
                 if (!pkg) pkg = extractPkgFromText(inlineText);
 
-                rowsToProcess.push({ mpn, type, mfr, value, tolerance, voltage, package: pkg, desc, current, polarity, tempRange });
+                rowsToProcess.push({ mpn, mfr, type, value, tolerance, voltage, package: pkg, desc, current, polarity, tempRange });
             }
 
             currentAuditData = [];
@@ -1387,19 +1492,24 @@
             progContainer.classList.remove('d-none');
 
             for (let i = 0; i < rowsToProcess.length; i++) {
+                // Stop immediately if user switched to Manual Lookup while BOM was still running
+                if (myJobId !== activeBomJobId) return;
+
                 progCount.innerText = `${i + 1} / ${rowsToProcess.length} Rows`;
                 progBar.style.width = `${Math.round(((i + 1) / rowsToProcess.length) * 100)}%`;
                 await verifyAndAppendRow(rowsToProcess[i], false);
-                if (i % 4 === 0 || i === rowsToProcess.length - 1) {
+                if (i % 3 === 0 || i === rowsToProcess.length - 1) {
                     renderAuditTable();
                 }
             }
 
-            setTimeout(() => progContainer.classList.add('d-none'), 800);
+            if (myJobId === activeBomJobId) {
+                setTimeout(() => progContainer.classList.add('d-none'), 800);
+            }
         }
 
         // =========================================================================
-        // 7. AUDIT ROW EVALUATION & TABLE RENDERER (STRICT NO-DUMMY LINKS)
+        // 7. AUDIT ROW EVALUATION & TABLE RENDERER (WITH INDEPENDENT MANUAL MODE)
         // =========================================================================
         async function verifyAndAppendRow(inputData, shouldRender = true) {
             const fetched = await resolveComponentData(inputData);
@@ -1410,6 +1520,19 @@
             const voltCheck = compareField(inputData.voltage, fetched.voltage, "Voltage", fetched.found, mismatches);
             const pkgCheck = compareField(inputData.package, fetched.package, "Package", fetched.found, mismatches);
 
+            // Also verify MFG_NAME if user provided it and web returned a manufacturer
+            let mfrHtml = `<small class="text-muted">MFG_NAME: ${fetched.mfr}</small>`;
+            if (inputData.mfr && fetched.found && fetched.mfr !== "—") {
+                const uMfr = inputData.mfr.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const wMfr = fetched.mfr.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (uMfr && wMfr && !wMfr.includes(uMfr.slice(0, 4)) && !uMfr.includes(wMfr.slice(0, 4))) {
+                    mismatches.push(`MFG_NAME: Provided "${inputData.mfr}" ≠ Official "${fetched.mfr}"`);
+                    mfrHtml = `<small class="text-danger fw-bold">Provided: ${inputData.mfr} ✖</small><br><small class="text-dark">Web MFG_NAME: <strong>${fetched.mfr}</strong></small>`;
+                } else {
+                    mfrHtml = `<small class="text-success fw-semibold">MFG_NAME: ${fetched.mfr} ✔</small>`;
+                }
+            }
+
             let status = "Verified Clean";
             if (!fetched.found) status = "Part Not Found";
             else if (mismatches.length > 0) status = "Mismatch Found";
@@ -1418,6 +1541,7 @@
                 index: currentAuditData.length + 1,
                 input: inputData,
                 fetched,
+                mfrHtml,
                 valCheck, tolCheck, voltCheck, pkgCheck,
                 status,
                 mismatches
@@ -1449,8 +1573,7 @@
                     statusBadge = `<span class="badge badge-verified">✔ Verified Clean</span>`;
                 }
 
-                // STRICT RULE: Only render distributor links if the part is genuinely found!
-                let sourceLinksHtml = `<span class="text-muted small">No official link (Unverified MPN)</span>`;
+                let sourceLinksHtml = `<span class="text-muted small">No official link (Unverified MFG_PN)</span>`;
                 if (f.found) {
                     const encMpn = encodeURIComponent(f.mpn);
                     const dkLink = f.primarySource.includes('DigiKey') && f.productUrl ? f.productUrl : `https://www.digikey.in/en/products/result?keywords=${encMpn}`;
@@ -1467,7 +1590,6 @@
                         </div>`;
                 }
 
-                // STRICT RULE: Only display alternates that strictly match all 5 core parameters
                 let alternatesHtml = `<span class="text-muted small">No verified alternate found</span>`;
                 if (f.found && f.alternates && f.alternates.length > 0) {
                     alternatesHtml = f.alternates.map(alt => {
@@ -1500,7 +1622,7 @@
                     </td>
                     <td>
                         <div class="fw-semibold text-dark">${f.type}</div>
-                        <small class="text-muted">Mfr: ${f.mfr}</small>
+                        ${item.mfrHtml}
                     </td>
                     <td class="${item.valCheck.isMismatch ? 'cell-mismatch' : ''}">${item.valCheck.html}</td>
                     <td class="${item.tolCheck.isMismatch ? 'cell-mismatch' : ''}">${item.tolCheck.html}</td>
@@ -1526,13 +1648,26 @@
             document.getElementById('resultsCard').classList.remove('d-none');
         }
 
-        // Manual Option A Form Handler
+        // FIXED: Option A Manual Lookup automatically switches out of BOM mode so it NEVER gets stuck on an uploaded BOM!
         document.getElementById('manualForm').addEventListener('submit', async (e) => {
             e.preventDefault();
+
+            // Cancel any running BOM loop and switch cleanly to MANUAL mode
+            activeBomJobId++;
+            if (currentMode === "BOM") {
+                currentAuditData = [];
+                document.getElementById('columnMapperCard').classList.add('d-none');
+                document.getElementById('bomProgressContainer').classList.add('d-none');
+                document.getElementById('bomFile').value = "";
+                document.getElementById('fileNameDisplay').innerText = "Switched to Manual Single-Part Mode";
+            }
+            currentMode = "MANUAL";
+            document.getElementById('resultsModeTitle').innerText = "Manual Component Lookup & 10-Parameter Verification Report";
+
             const btn = document.getElementById('manualSubmitBtn');
             const origText = btn.innerHTML;
             btn.disabled = true;
-            btn.innerHTML = `⏳ Querying Official Distributor Catalogs...`;
+            btn.innerHTML = `⏳ Fetching Single Component Details from Official APIs...`;
 
             const inputData = {
                 mpn: document.getElementById('manMpn').value.trim(),
@@ -1548,24 +1683,40 @@
                 desc: document.getElementById('manDesc').value.trim()
             };
 
+            if (!inputData.mpn && !inputData.value && !inputData.desc) {
+                alert("Please enter a Part Number (MFG_PN) or target parameters to fetch details.");
+                btn.disabled = false;
+                btn.innerHTML = origText;
+                return;
+            }
+
+            // Place newest manual search at the top of the manual audit table
+            currentAuditData = [];
             await verifyAndAppendRow(inputData, true);
+
             btn.disabled = false;
             btn.innerHTML = origText;
+            document.getElementById('resultsCard').scrollIntoView({ behavior: 'smooth' });
         });
 
-        // Export Full 10-Parameter Verified BOM to Excel (.xlsx)
+        function clearManualInputs() {
+            document.getElementById('manualForm').reset();
+        }
+
+        // Export Full 10-Parameter Verified BOM to Excel (.xlsx) with MFG_PN & MFG_NAME headers
         function exportCleanedBOM() {
             if (currentAuditData.length === 0) return;
             const exportRows = currentAuditData.map(item => {
                 const f = item.fetched;
                 return {
                     "Row #": item.index,
-                    "MPN": f.mpn,
+                    "MFG_PN": f.mpn,
+                    "Provided MFG_NAME": item.input.mfr || "—",
+                    "Verified MFG_NAME (Web)": f.mfr,
                     "Primary Source": f.primarySource,
                     "Audit Status": item.status,
                     "Highlighted Mistakes": item.mismatches.join("; ") || "None",
                     "1. Component Category (Web)": f.type,
-                    "2. Manufacturer (Web)": f.mfr,
                     "Provided Value": item.input.value || "—",
                     "3. Verified Value (Web)": f.value,
                     "Provided Tolerance": item.input.tolerance || "—",
@@ -1586,14 +1737,19 @@
 
             const ws = XLSX.utils.json_to_sheet(exportRows);
             const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Verified_10Param_BOM");
-            XLSX.writeFile(wb, "Verified_Hardware_BOM_With_Alternates.xlsx");
+            XLSX.utils.book_append_sheet(wb, ws, "Verified_BOM_Report");
+            XLSX.writeFile(wb, "Verified_Hardware_BOM_MFG_PN.xlsx");
         }
 
         function clearResults() {
+            activeBomJobId++;
+            currentMode = "NONE";
             currentAuditData = [];
+            document.getElementById('bomFile').value = "";
+            document.getElementById('fileNameDisplay').innerText = "No file uploaded";
             document.getElementById('resultsCard').classList.add('d-none');
             document.getElementById('columnMapperCard').classList.add('d-none');
+            document.getElementById('bomProgressContainer').classList.add('d-none');
         }
     </script>
 </body>
