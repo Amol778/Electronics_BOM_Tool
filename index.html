@@ -161,6 +161,25 @@
             padding: 8px 12px;
             font-size: 0.78rem;
         }
+        /* Crisp, high-contrast engineering workspace */
+        :root { --hw-primary:#10243a; --hw-accent:#2563eb; --hw-bg:#f5f7fb; --hw-border:#dbe3ee; --hw-text:#263449; }
+        body { background:#f4f7fb; color:#243247; font-size:.91rem; }
+        .navbar { background:linear-gradient(110deg,#101f33,#183b63); border-bottom:3px solid #3b82f6; box-shadow:0 5px 18px #10243a18; }
+        .card { border-radius:14px; border-color:#dce4ef; box-shadow:0 4px 18px rgba(15,35,60,.055); overflow:hidden; }
+        .card:hover { box-shadow:0 8px 26px rgba(15,35,60,.09); }
+        .card-header { background:#f7f9fc; padding:13px 17px; letter-spacing:.01em; }
+        .form-control,.form-select { border-color:#d4deea; border-radius:8px; min-height:34px; }
+        .form-control:focus,.form-select:focus { border-color:#60a5fa; box-shadow:0 0 0 .2rem #3b82f61c; }
+        .btn { border-radius:8px; font-weight:600; }
+        .btn-primary { background:#2563eb; border-color:#2563eb; }
+        .btn-success { background:#0f9f78; border-color:#0f9f78; }
+        .upload-dropzone { background:linear-gradient(145deg,#f8fbff,#eef5ff); border-color:#8bb7f7; border-radius:13px; }
+        .quick-chip { border-radius:8px; padding:5px 9px; }
+        .alt-box { background:#f8fbff; border-color:#dbe7f6; border-radius:9px; padding:9px 10px; }
+        .table thead th { background:#f1f5fa; color:#243b53; white-space:nowrap; border-color:#dbe3ee; }
+        .table td { border-color:#e3e9f1; }
+        a { color:#1d4ed8; }
+        @media (max-width:768px) { .navbar { padding:14px!important; align-items:flex-start!important; gap:12px; } .navbar-brand { white-space:normal; font-size:1rem; } .container-fluid { padding-left:12px!important; padding-right:12px!important; } }
     </style>
 </head>
 <body>
@@ -257,7 +276,14 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">1. Component Type / Category</label>
-                                    <input type="text" id="manType" class="form-control form-control-sm" placeholder="e.g., Capacitor, Resistor, IC">
+                                    <select id="manType" class="form-select form-select-sm" onchange="updateCategoryFields()">
+                                        <option value="">Auto-detect / Select category</option>
+                                        <option>Resistor</option><option>Capacitor</option><option>Inductor / Ferrite Bead</option>
+                                        <option>Diode / TVS</option><option>Transistor / MOSFET</option><option>LED</option>
+                                        <option>Processor / MCU</option><option>Memory / RAM</option><option>FPGA / SoC</option>
+                                        <option>Power Management IC</option><option>Interface IC</option><option>Sensor</option>
+                                        <option>Connector</option><option>Oscillator / Crystal</option><option>Protection IC</option><option>Other IC</option>
+                                    </select>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label">2. MFG_NAME (Manufacturer)</label>
@@ -743,6 +769,7 @@
                 primarySource: 'DigiKey Official API',
                 badgeClass: 'badge-digikey',
                 stock: p.QuantityAvailable ?? 'Available',
+                price: extractApiPrice(p),
                 productUrl: p.ProductUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(mpn)}`,
                 datasheetUrl: p.DatasheetUrl || '',
                 alternates: []
@@ -886,6 +913,7 @@
                 primarySource: 'Mouser Official API',
                 badgeClass: 'badge-mouser',
                 stock: p.Availability || p.AvailabilityInStock || 'In Catalog',
+                price: extractApiPrice(p),
                 productUrl: p.ProductDetailUrl || `https://www.mouser.in/c/?q=${encodeURIComponent(mpn)}`,
                 datasheetUrl: p.DataSheetUrl || '',
                 alternates: []
@@ -895,8 +923,17 @@
         // =========================================================================
         // 3. STRICT 5-PARAMETER ALTERNATE MATCHING FILTER
         // =========================================================================
+        function normalizeManufacturer(value) {
+            return String(value || '').toLowerCase()
+                .replace(/\\b(incorporated|inc\\.?|corporation|corp\\.?|limited|ltd\\.?|electronics|technology|technologies|co\\.?|gmbh)\\b/g, '')
+                .replace(/[^a-z0-9]/g, '');
+        }
+
         function isStrictAlternateMatch(target, candidate) {
             if (!candidate || !candidate.mpn) return false;
+            const targetMfr = normalizeManufacturer(target.mfr);
+            const candidateMfr = normalizeManufacturer(candidate.mfr);
+            if (targetMfr && candidateMfr && targetMfr === candidateMfr) return false;
             if (normalizeCategory(target.type) !== normalizeCategory(candidate.type)) return false;
             if (target.value !== '—' && candidate.value !== '—') {
                 if (normalizeForCompare(target.value) !== normalizeForCompare(candidate.value)) return false;
@@ -1177,7 +1214,7 @@
                     { mpn: `CL${samSize}B${eiaCap}${tolChar}${samV}8NNNC`, mfr: "Samsung", source: "Mouser", specs: paramSummary },
                     { mpn: `CC${cleanPkg}${tolChar}RX7R${yagV}BB${eiaCap}`, mfr: "YAGEO", source: "LCSC / JLCPCB", specs: paramSummary }
                 ];
-                return candidates.filter(c => c.mpn !== mpn);
+                return candidates.filter(c => c.mpn !== mpn && normalizeManufacturer(c.mfr) !== normalizeManufacturer(spec.mfr));
             }
 
             if (catNorm === "resistor") {
@@ -1191,7 +1228,7 @@
                     { mpn: `CRCW${cleanPkg}${codes.vishay}${tolChar}KEA`, mfr: "Vishay Dale", source: "Mouser", specs: paramSummary },
                     { mpn: `ERJ-${erjCode}${codes.eia4}V`, mfr: "Panasonic", source: "LCSC / RS PRO", specs: paramSummary }
                 ];
-                return candidates.filter(c => c.mpn !== mpn);
+                return candidates.filter(c => c.mpn !== mpn && normalizeManufacturer(c.mfr) !== normalizeManufacturer(spec.mfr));
             }
 
             return [];
@@ -1815,6 +1852,15 @@
             if (shouldRender) renderAuditTable();
         }
 
+        function formatPartPrice(value) {
+            if (value === null || value === undefined || value === '') return 'Not returned by API — check live listing';
+            const currency = (getActiveLocale().split(':')[1] || 'INR').toUpperCase();
+            const numeric = Number(String(value).replace(/[^0-9.]/g, ''));
+            if (!Number.isFinite(numeric)) return String(value);
+            try { return new Intl.NumberFormat(currency === 'INR' ? 'en-IN' : 'en-US', {style:'currency',currency,maximumFractionDigits:4}).format(numeric); }
+            catch (_) { return currency + ' ' + numeric; }
+        }
+
         function renderAuditTable() {
             const tbody = document.getElementById('auditTableBody');
             tbody.innerHTML = '';
@@ -1844,13 +1890,14 @@
                     const dkLink = f.primarySource.includes('DigiKey') && f.productUrl ? f.productUrl : `https://www.digikey.in/en/products/result?keywords=${encMpn}`;
                     const mouserLink = f.primarySource.includes('Mouser') && f.productUrl ? f.productUrl : `https://www.mouser.in/c/?q=${encMpn}`;
                     const lcscLink = `https://www.lcsc.com/search?q=${encMpn}`;
-                    const rsLink = `https://in.rsdelivers.com/productlist/search?query=${encMpn}`;
+                    const rsLink = `https://uk.rs-online.com/web/c/?searchTerm=${encMpn}`;
 
                     sourceLinksHtml = `
                         <div class="mt-1" style="font-size: 0.73rem;">
                             <a href="${dkLink}" target="_blank" class="text-danger fw-semibold text-decoration-none me-2">DigiKey ↗</a>
                             <a href="${mouserLink}" target="_blank" class="text-primary fw-semibold text-decoration-none me-2">Mouser ↗</a>
-                            <a href="${lcscLink}" target="_blank" class="text-success fw-semibold text-decoration-none me-2">LCSC/JLCPCB ↗</a>
+                            <a href="${lcscLink}" target="_blank" rel="noopener" class="text-success fw-semibold text-decoration-none me-2">LCSC ↗</a>
+                            <a href="https://jlcpcb.com/parts?search=${encMpn}" target="_blank" rel="noopener" class="text-success fw-semibold text-decoration-none me-2">JLCPCB ↗</a>
                             <a href="${rsLink}" target="_blank" class="text-dark fw-semibold text-decoration-none">RS PRO ↗</a>
                         </div>`;
                 }
@@ -1873,7 +1920,7 @@
                                 <a href="${altUrl}" target="_blank" class="fw-bold text-decoration-none"><code>${alt.mpn}</code> ↗</a>
                                 <span class="badge ${badgeCls}" style="font-size:0.65rem;">${alt.source || 'Verified'}</span>
                             </div>
-                            <div class="text-muted" style="font-size:0.71rem;">${alt.mfr} • ${alt.specs || `${alt.value} | ${alt.voltage} | ${alt.package} | ${alt.tolerance}`}</div>
+                            <div class="text-muted" style="font-size:0.71rem;">${alt.mfr} • ${alt.specs || `${alt.value} | ${alt.voltage} | ${alt.package} | ${alt.tolerance}`}<br><strong>Price:</strong> ${formatPartPrice(alt.price)}</div>
                         </div>`;
                     }).join('');
                 }
@@ -1969,6 +2016,25 @@
             document.querySelectorAll('.quick-chip').forEach(c => c.classList.remove('active'));
         }
 
+        function updateCategoryFields() {
+            const category = (document.getElementById('manType')?.value || '').toLowerCase();
+            const passive = /resistor|capacitor|inductor|ferrite|diode|tvs|led/.test(category);
+            const isIc = /processor|mcu|memory|ram|fpga|soc|power management|interface|sensor|protection|other ic/.test(category);
+            const labels = {
+                manValue: passive ? 'Value / capacitance / resistance' : (isIc ? 'Core / memory / interface / key spec' : 'Value / key specification'),
+                manTolerance: passive ? 'Tolerance' : 'Accuracy / tolerance (if applicable)',
+                manVoltage: isIc ? 'Supply voltage / I/O voltage' : 'Voltage rating',
+                manCurrent: isIc ? 'Operating / output current' : 'Current / power rating',
+                manPolarity: passive ? 'Polarity / channel type' : 'Interface / polarity / channel type'
+            };
+            Object.entries(labels).forEach(([id, label]) => {
+                const el = document.getElementById(id);
+                if (el?.parentElement?.querySelector('label')) el.parentElement.querySelector('label').textContent = label;
+            });
+            const tol = document.getElementById('manTolerance')?.closest('.col-md-3');
+            if (tol) tol.style.opacity = isIc ? '.72' : '1';
+        }
+
         // Quick category chips for unique / hard-to-decode parts (processors, memory, FPGAs, connectors):
         // these rarely match the EIA/IEC passive-component decoder, so biasing the Type field and the
         // keyword fallback search toward the right category materially improves DigiKey/Mouser keyword hits.
@@ -2010,6 +2076,8 @@
                     "10. Operating Temperature (Web)": f.tempRange,
                     "Strict Alternate 1": f.alternates[0] ? `${f.alternates[0].mpn} (${f.alternates[0].mfr})` : "None",
                     "Strict Alternate 2": f.alternates[1] ? `${f.alternates[1].mpn} (${f.alternates[1].mfr})` : "None",
+                    "Alternate 1 Price": f.alternates[0] ? formatPartPrice(f.alternates[0].price) : "—",
+                    "Alternate 2 Price": f.alternates[1] ? formatPartPrice(f.alternates[1].price) : "—",
                     "Official Information Link": f.found ? (f.productUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(f.mpn)}`) : "Not Found"
                 };
             });
