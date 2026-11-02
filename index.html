@@ -188,7 +188,7 @@
     <nav class="navbar navbar-dark px-4 py-3 d-flex justify-content-between align-items-center">
         <div>
             <span class="navbar-brand mb-0 h1 fw-bold">⚡ Hardware Design Guide — BOM Verification & Global Sourcing Engine</span>
-            <div class="text-white-50 small">Live API Priority: 1. DigiKey API v4 &rarr; 2. Mouser Search API v1 &rarr; 3. LCSC / JLCPCB / RS PRO</div>
+            <div class="text-white-50 small">Live API Priority: DigiKey v4 &rarr; Mouser v1 &rarr; TrustedParts Inventory &rarr; LCSC fallback</div>
         </div>
         <div class="d-flex align-items-center gap-2">
             <span id="apiKeyBadge" class="badge bg-warning text-dark py-2 px-3">
@@ -241,10 +241,25 @@
                         </select>
                     </div>
                 </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-4">
+                        <label class="form-label">TrustedParts Company ID</label>
+                        <input type="text" id="cfgTrustedPartsCompanyId" class="form-control form-control-sm" autocomplete="off" placeholder="Assigned by TrustedParts">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">TrustedParts API Key</label>
+                        <input type="password" id="cfgTrustedPartsApiKey" class="form-control form-control-sm" autocomplete="new-password" placeholder="Request free Inventory API access">
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" onclick="testTrustedPartsConnection()">Test TrustedParts</button>
+                        <div id="trustedPartsDiagLine" class="small mt-1 text-muted">Not called yet.</div>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="small text-muted">TrustedParts provides authorized distributor stock and pricing. API access must be approved; direct browser calls may be blocked by CORS. For production, proxy this request through your backend.</div>
+                    </div>
+                </div>
                 <div class="d-flex justify-content-between align-items-center mt-3">
-                    <small class="text-muted">Hardcoded team credentials are automatically loaded. Click Restore Defaults to reset to the embedded keys at any time.</small>
+                    <small class="text-muted">Credentials are stored in this browser only. For shared or production deployment, move API credentials to a backend proxy.</small>
                     <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-danger" onclick="restoreDefaultKeys()">Restore Hardcoded Keys</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="restoreDefaultKeys()">Clear / Restore Defaults</button>
                         <button class="btn btn-sm btn-primary fw-semibold" onclick="saveApiConfig()">💾 Save Overrides</button>
                     </div>
                 </div>
@@ -351,7 +366,7 @@
                         </div>
                         <div class="d-flex justify-content-between align-items-center mt-2">
                             <span id="fileNameDisplay" class="small fw-bold text-success">No file uploaded</span>
-                            <span id="apiModeIndicator" class="badge bg-success">Live API Active: DigiKey v4 + Mouser v1</span>
+                            <span id="apiModeIndicator" class="badge bg-success">Live API Active: DigiKey v4 + Mouser v1 + optional TrustedParts</span>
                         </div>
                     </div>
                 </div>
@@ -498,11 +513,13 @@
         // failure reason, so "Not Found" rows and the Test Connection buttons can tell you WHY.
         const hwApiDiag = {
             digikey: { ok: null, detail: "Not called yet." },
-            mouser:  { ok: null, detail: "Not called yet." }
+            mouser:  { ok: null, detail: "Not called yet." },
+            trustedparts: { ok: null, detail: "Not called yet." }
         };
         function setDiag(source, ok, detail) {
             hwApiDiag[source] = { ok, detail };
-            const el = document.getElementById(source === 'digikey' ? 'dkDiagLine' : 'mouserDiagLine');
+            const elId = source === 'digikey' ? 'dkDiagLine' : source === 'mouser' ? 'mouserDiagLine' : 'trustedPartsDiagLine';
+            const el = document.getElementById(elId);
             if (el) {
                 el.textContent = detail;
                 el.className = 'small mt-1 ' + (ok === true ? 'text-success' : ok === false ? 'text-danger' : 'text-muted');
@@ -542,6 +559,12 @@
         function getActiveLocale() {
             return localStorage.getItem('hw_locale') || DEFAULT_LOCALE;
         }
+        function getTrustedPartsCompanyId() {
+            return localStorage.getItem('hw_trustedparts_company_id') || '';
+        }
+        function getTrustedPartsApiKey() {
+            return localStorage.getItem('hw_trustedparts_api_key') || '';
+        }
 
         window.addEventListener('DOMContentLoaded', () => {
             if (!localStorage.getItem('hw_mouser_key')) localStorage.setItem('hw_mouser_key', DEFAULT_MOUSER_KEY);
@@ -553,6 +576,8 @@
             document.getElementById('cfgDkClientId').value = getActiveDkClientId();
             document.getElementById('cfgDkClientSecret').value = getActiveDkClientSecret();
             document.getElementById('cfgLocale').value = getActiveLocale();
+            document.getElementById('cfgTrustedPartsCompanyId').value = getTrustedPartsCompanyId();
+            document.getElementById('cfgTrustedPartsApiKey').value = getTrustedPartsApiKey();
             updateApiStatusBadge();
         });
 
@@ -584,11 +609,24 @@
             dkAccessToken = null;
         }
 
+        async function testTrustedPartsConnection() {
+            const oldId = localStorage.getItem('hw_trustedparts_company_id');
+            const oldKey = localStorage.getItem('hw_trustedparts_api_key');
+            localStorage.setItem('hw_trustedparts_company_id', document.getElementById('cfgTrustedPartsCompanyId').value.trim());
+            localStorage.setItem('hw_trustedparts_api_key', document.getElementById('cfgTrustedPartsApiKey').value.trim());
+            setDiag('trustedparts', null, 'Testing TrustedParts with RC0603FR-0710KL...');
+            await fetchFromTrustedPartsAPI('RC0603FR-0710KL');
+            if (oldId !== null) localStorage.setItem('hw_trustedparts_company_id', oldId); else localStorage.removeItem('hw_trustedparts_company_id');
+            if (oldKey !== null) localStorage.setItem('hw_trustedparts_api_key', oldKey); else localStorage.removeItem('hw_trustedparts_api_key');
+        }
+
         function saveApiConfig() {
             localStorage.setItem('hw_mouser_key', document.getElementById('cfgMouserKey').value.trim() || DEFAULT_MOUSER_KEY);
             localStorage.setItem('hw_dk_client_id', document.getElementById('cfgDkClientId').value.trim() || DEFAULT_DK_CLIENT_ID);
             localStorage.setItem('hw_dk_client_secret', document.getElementById('cfgDkClientSecret').value.trim() || DEFAULT_DK_CLIENT_SECRET);
             localStorage.setItem('hw_locale', document.getElementById('cfgLocale').value);
+            localStorage.setItem('hw_trustedparts_company_id', document.getElementById('cfgTrustedPartsCompanyId').value.trim());
+            localStorage.setItem('hw_trustedparts_api_key', document.getElementById('cfgTrustedPartsApiKey').value.trim());
             dkAccessToken = null;
             updateApiStatusBadge();
             toggleApiConfig();
@@ -599,6 +637,10 @@
             localStorage.setItem('hw_dk_client_id', DEFAULT_DK_CLIENT_ID);
             localStorage.setItem('hw_dk_client_secret', DEFAULT_DK_CLIENT_SECRET);
             localStorage.setItem('hw_locale', DEFAULT_LOCALE);
+            localStorage.removeItem('hw_trustedparts_company_id');
+            localStorage.removeItem('hw_trustedparts_api_key');
+            document.getElementById('cfgTrustedPartsCompanyId').value = '';
+            document.getElementById('cfgTrustedPartsApiKey').value = '';
             document.getElementById('cfgMouserKey').value = DEFAULT_MOUSER_KEY;
             document.getElementById('cfgDkClientId').value = DEFAULT_DK_CLIENT_ID;
             document.getElementById('cfgDkClientSecret').value = DEFAULT_DK_CLIENT_SECRET;
@@ -610,6 +652,8 @@
         function updateApiStatusBadge() {
             const mKey = getActiveMouserKey();
             const dkId = getActiveDkClientId();
+            const tpId = getTrustedPartsCompanyId();
+            const tpKey = getTrustedPartsApiKey();
             const dot = document.getElementById('apiStatusDot');
             const modeBadge = document.getElementById('apiModeIndicator');
             const navBadge = document.getElementById('apiKeyBadge');
@@ -619,13 +663,19 @@
                 modeBadge.className = 'badge bg-success';
                 modeBadge.innerText = 'Live API Active: DigiKey v4 + Mouser v1';
                 navBadge.className = 'badge bg-success py-2 px-3';
-                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>DigiKey + Mouser Keys Active';
+                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>DigiKey + Mouser Keys Active' + (tpId && tpKey ? ' + TrustedParts' : '');
             } else if (mKey) {
                 dot.className = 'api-status-dot dot-active';
                 modeBadge.className = 'badge bg-primary';
                 modeBadge.innerText = 'Live API Active: Mouser v1 + Global Fallback';
                 navBadge.className = 'badge bg-primary py-2 px-3';
                 navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>Mouser Key Active';
+            } else if (tpId && tpKey) {
+                dot.className = 'api-status-dot dot-active';
+                modeBadge.className = 'badge bg-primary';
+                modeBadge.innerText = 'Live API Active: TrustedParts Inventory';
+                navBadge.className = 'badge bg-primary py-2 px-3';
+                navBadge.innerHTML = '<span id="apiStatusDot" class="api-status-dot dot-active"></span>TrustedParts API Active';
             } else {
                 dot.className = 'api-status-dot dot-inactive';
                 modeBadge.className = 'badge bg-warning text-dark';
@@ -973,11 +1023,127 @@
         // =========================================================================
         // 4. PRIORITY 3: GLOBAL SITES (LCSC / JLCPCB / RS PRO) + EIA/IEC DECODER
         // =========================================================================
-        // Best-effort live lookup against LCSC's public search JSON (the same endpoint LCEDA/EasyEDA's
-        // own search box calls -- no official docs, no API key, and the field names below are
-        // reverse-engineered, so this is wrapped in try/catch end-to-end and silently falls through
+        // Best-effort live lookup against LCSC's public search JSON (not the official LCSC Open API).
+        // The official LCSC Open API requires account registration and approval; implement it server-side
+        // once credentials and the current auth/signature requirements are available. This fallback's
+        // endpoint/field names are reverse-engineered, so it is wrapped in try/catch end-to-end and falls through
         // to the EIA/IEC decoder + a plain search link below if the browser's CORS policy blocks it,
         // the endpoint is unreachable, or its response shape has changed.
+        // Official TrustedParts Inventory API v2. Requires an approved Company ID + API key.
+        // Endpoint/request fields follow the public API documentation. Response parsing is defensive
+        // because TrustedParts may return different nested result shapes as its API evolves.
+        function findObjectsWithPartNumber(node, out = [], seen = new Set()) {
+            if (!node || typeof node !== 'object' || seen.has(node)) return out;
+            seen.add(node);
+            if (Array.isArray(node)) {
+                node.forEach(v => findObjectsWithPartNumber(v, out, seen));
+                return out;
+            }
+            const keys = Object.keys(node);
+            const mpnKey = keys.find(k => /^(manufacturerpartnumber|manufacturer_part_number|mpn|partnumber|part_number|searchtoken)$/i.test(k));
+            if (mpnKey && typeof node[mpnKey] === 'string') out.push(node);
+            keys.forEach(k => findObjectsWithPartNumber(node[k], out, seen));
+            return out;
+        }
+
+        function getDeepValue(obj, patterns) {
+            const seen = new Set();
+            function walk(x) {
+                if (!x || typeof x !== 'object' || seen.has(x)) return null;
+                seen.add(x);
+                if (Array.isArray(x)) {
+                    for (const item of x) { const v = walk(item); if (v !== null && v !== undefined && v !== '') return v; }
+                    return null;
+                }
+                for (const [k, v] of Object.entries(x)) {
+                    if (patterns.some(rx => rx.test(k)) && v !== null && v !== undefined && v !== '' && typeof v !== 'object') return v;
+                }
+                for (const v of Object.values(x)) { const found = walk(v); if (found !== null && found !== undefined && found !== '') return found; }
+                return null;
+            }
+            return walk(obj);
+        }
+
+        async function fetchFromTrustedPartsAPI(mpn) {
+            const companyId = getTrustedPartsCompanyId();
+            const apiKey = getTrustedPartsApiKey();
+            if (!mpn || mpn.length < 2) return null;
+            if (!companyId || !apiKey) {
+                setDiag('trustedparts', false, 'TrustedParts credentials not configured. Request free Inventory API access and enter Company ID + API key.');
+                return null;
+            }
+            try {
+                const locale = getActiveLocale().split(':');
+                const currency = (locale[1] || 'INR').toUpperCase();
+                const payload = {
+                    CompanyId: companyId,
+                    ApiKey: apiKey,
+                    Queries: [{
+                        SearchToken: mpn,
+                        CountryCode: (locale[0] || 'IN').toUpperCase(),
+                        CurrencyCode: currency,
+                        InStockOnly: false,
+                        ExactMatch: true,
+                        IsCrawler: false,
+                        UseCachedData: false,
+                        UserAgent: 'Hardware Design Guide BOM Verification Tool'
+                    }]
+                };
+                const res = await fetch('https://api.trustedparts.com/v2/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    setDiag('trustedparts', false, `TrustedParts HTTP ${res.status} ${res.statusText}. Verify credentials/API approval; if the browser reports CORS, use a backend proxy.`);
+                    return null;
+                }
+                const data = await res.json();
+                const candidates = findObjectsWithPartNumber(data);
+                const target = String(mpn).toUpperCase().replace(/[^A-Z0-9]/g, '');
+                const exact = candidates.find(o => {
+                    const val = o.ManufacturerPartNumber || o.manufacturerPartNumber || o.manufacturer_part_number || o.MPN || o.mpn || o.PartNumber || o.partNumber || o.part_number || '';
+                    return String(val).toUpperCase().replace(/[^A-Z0-9]/g, '') === target;
+                }) || candidates[0];
+                if (!exact) {
+                    setDiag('trustedparts', true, 'Connected, but no exact matching part was returned.');
+                    return null;
+                }
+                const partMpn = exact.ManufacturerPartNumber || exact.manufacturerPartNumber || exact.manufacturer_part_number || exact.MPN || exact.mpn || exact.PartNumber || exact.partNumber || mpn;
+                const mfr = exact.ManufacturerName || exact.manufacturerName || exact.Manufacturer || exact.manufacturer || exact.Mfr || '—';
+                const desc = exact.Description || exact.description || exact.ProductDescription || exact.productDescription || exact.Name || '';
+                const decoded = decodeStandardMPN(partMpn, desc);
+                const price = getDeepValue(exact, [/^unitprice$/i, /^price$/i, /discountprice/i, /priceperunit/i]);
+                const stock = getDeepValue(exact, [/quantityavailable/i, /^stock$/i, /instockquantity/i, /availabilityquantity/i]);
+                const productUrl = getDeepValue(exact, [/producturl/i, /productdetailurl/i, /parturl/i, /detailurl/i]);
+                setDiag('trustedparts', true, 'Connected — matching authorized-channel data returned.');
+                return {
+                    found: true,
+                    mpn: String(partMpn),
+                    mfr: typeof mfr === 'object' ? (mfr.Name || mfr.name || '—') : String(mfr),
+                    type: simplifyCategory(exact.Category || exact.category || '', desc) || decoded.type || 'Component',
+                    value: decoded.value || extractValueFromText(desc) || '—',
+                    tolerance: decoded.tolerance || extractTolFromText(desc) || '—',
+                    voltage: decoded.voltage || extractVoltFromText(desc) || '—',
+                    package: decoded.package || extractPkgFromText(desc) || '—',
+                    description: desc || decoded.description || '—',
+                    current: decoded.current || extractCurrentFromText(desc) || '—',
+                    polarity: decoded.polarity || inferPolarity(exact.Category || '', desc) || '—',
+                    tempRange: decoded.tempRange || extractTempFromText(desc) || '—',
+                    primarySource: 'TrustedParts Inventory API',
+                    badgeClass: 'badge-global',
+                    stock: stock !== null ? stock : 'See authorized distributor offers',
+                    price: price !== null && Number.isFinite(Number(price)) ? Number(price) : null,
+                    productUrl: typeof productUrl === 'string' && /^https?:/i.test(productUrl) ? productUrl : `https://www.trustedparts.com/en/search?q=${encodeURIComponent(partMpn)}`,
+                    datasheetUrl: getDeepValue(exact, [/datasheeturl/i, /datasheetlink/i]) || '',
+                    alternates: []
+                };
+            } catch (err) {
+                setDiag('trustedparts', false, describeFetchError(err) + ' TrustedParts API may require a backend proxy due to browser CORS.');
+                return null;
+            }
+        }
+
         async function fetchFromLcscAPI(mpn) {
             if (!mpn) return null;
             try {
@@ -1258,7 +1424,16 @@
                 return mouserResult;
             }
 
-            // 3a. Best-effort live LCSC search (unofficial endpoint -- see fetchFromLcscAPI comment)
+            // 3a. Official TrustedParts inventory lookup (requires approved free API credentials)
+            if (mpn && getTrustedPartsCompanyId() && getTrustedPartsApiKey()) {
+                const tpResult = await fetchFromTrustedPartsAPI(mpn);
+                if (tpResult && tpResult.found) {
+                    tpResult.alternates = buildStrictVerifiedAlternates(tpResult);
+                    return tpResult;
+                }
+            }
+
+            // 3b. Best-effort live LCSC search (unofficial endpoint -- see fetchFromLcscAPI comment)
             if (mpn) {
                 const lcscResult = await fetchFromLcscAPI(mpn);
                 if (lcscResult && lcscResult.found) {
