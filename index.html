@@ -185,14 +185,23 @@
         <!-- COLLAPSIBLE API CREDENTIALS PANEL (PRE-FILLED & HIDDEN BY DEFAULT) -->
         <div id="apiConfigCard" class="card border-warning d-none mb-3">
             <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
-                <span>🔑 Pre-Configured Official Distributor API Credentials</span>
+                <span>🔑 Distributor API Credentials (saved only in this browser)</span>
                 <button class="btn-close btn-sm" onclick="toggleApiConfig()"></button>
             </div>
             <div class="card-body">
+                <div class="alert alert-info py-2 px-3 mb-3" style="font-size:0.78rem;">
+                    Keys are only applied after you click <strong>💾 Save Overrides</strong> below -- typing into
+                    a field and closing this panel without saving does nothing. If DigiKey keeps failing, click
+                    "Test DigiKey Connection": DigiKey's token endpoint commonly rejects calls made directly from
+                    a browser page (CORS), since a Client Secret isn't meant to be used client-side at all -- the
+                    diagnostic line will say so plainly if that's what's happening.
+                </div>
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label">Mouser Search API Key (v1/v2)</label>
                         <input type="password" id="cfgMouserKey" class="form-control form-control-sm">
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" onclick="testMouserConnection()">Test Mouser Connection</button>
+                        <div id="mouserDiagLine" class="small mt-1 text-muted">Not called yet.</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label">DigiKey Client ID (API v4)</label>
@@ -201,6 +210,8 @@
                     <div class="col-md-3">
                         <label class="form-label">DigiKey Client Secret (OAuth2)</label>
                         <input type="password" id="cfgDkClientSecret" class="form-control form-control-sm">
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" onclick="testDigiKeyConnection()">Test DigiKey Connection</button>
+                        <div id="dkDiagLine" class="small mt-1 text-muted">Not called yet.</div>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Locale / Currency</label>
@@ -457,6 +468,30 @@
         let dkAccessToken = null;
         let dkTokenExpiry = 0;
 
+        // Shared diagnostics: every DigiKey/Mouser call updates this instead of swallowing its real
+        // failure reason, so "Not Found" rows and the Test Connection buttons can tell you WHY.
+        const hwApiDiag = {
+            digikey: { ok: null, detail: "Not called yet." },
+            mouser:  { ok: null, detail: "Not called yet." }
+        };
+        function setDiag(source, ok, detail) {
+            hwApiDiag[source] = { ok, detail };
+            const el = document.getElementById(source === 'digikey' ? 'dkDiagLine' : 'mouserDiagLine');
+            if (el) {
+                el.textContent = detail;
+                el.className = 'small mt-1 ' + (ok === true ? 'text-success' : ok === false ? 'text-danger' : 'text-muted');
+            }
+        }
+        function describeFetchError(err) {
+            // A bare "Failed to fetch" / TypeError from fetch() almost always means the browser blocked
+            // the request before it even got a response -- i.e. CORS, not a bad key.
+            if (err instanceof TypeError) {
+                return "Request blocked before any response was received -- almost always a CORS policy " +
+                       "block (this API does not allow direct calls from a browser page), or no network / DNS failure.";
+            }
+            return err && err.message ? err.message : String(err);
+        }
+
         // =========================================================================
         // 1. HARDCODED TEAM API CREDENTIALS (ZERO-LOGIN FOR ALL COLLEAGUES)
         // =========================================================================
@@ -497,6 +532,30 @@
 
         function toggleApiConfig() {
             document.getElementById('apiConfigCard').classList.toggle('d-none');
+        }
+
+        // Fires one real search against each distributor using a well-known, always-in-catalog part
+        // (RC0603FR-0710KL, a common YAGEO 10k 0603 resistor) so the result -- pass or the exact HTTP
+        // status / CORS failure -- is visible immediately, using whatever is currently in the input
+        // boxes (temporarily, without requiring Save first).
+        async function testMouserConnection() {
+            const prevKey = localStorage.getItem('hw_mouser_key');
+            localStorage.setItem('hw_mouser_key', document.getElementById('cfgMouserKey').value.trim());
+            setDiag('mouser', null, 'Testing...');
+            await fetchFromMouserAPI('RC0603FR-0710KL');
+            if (prevKey !== null) localStorage.setItem('hw_mouser_key', prevKey); else localStorage.removeItem('hw_mouser_key');
+        }
+        async function testDigiKeyConnection() {
+            const prevId = localStorage.getItem('hw_dk_client_id');
+            const prevSecret = localStorage.getItem('hw_dk_client_secret');
+            localStorage.setItem('hw_dk_client_id', document.getElementById('cfgDkClientId').value.trim());
+            localStorage.setItem('hw_dk_client_secret', document.getElementById('cfgDkClientSecret').value.trim());
+            dkAccessToken = null; // force a fresh token request so the test actually exercises OAuth
+            setDiag('digikey', null, 'Testing...');
+            await fetchFromDigiKeyAPI('RC0603FR-0710KL');
+            if (prevId !== null) localStorage.setItem('hw_dk_client_id', prevId); else localStorage.removeItem('hw_dk_client_id');
+            if (prevSecret !== null) localStorage.setItem('hw_dk_client_secret', prevSecret); else localStorage.removeItem('hw_dk_client_secret');
+            dkAccessToken = null;
         }
 
         function saveApiConfig() {
@@ -567,7 +626,8 @@
         async function fetchFromDigiKeyAPI(mpn) {
             const clientId = getActiveDkClientId();
             const clientSecret = getActiveDkClientSecret();
-            if (!clientId || !clientSecret || !mpn) return null;
+            if (!clientId || !clientSecret) { setDiag('digikey', false, 'No DigiKey Client ID / Secret saved. Open the API Keys panel and click "Save Overrides".'); return null; }
+            if (!mpn) return null;
 
             const [site, currency] = getActiveLocale().split(':');
 
@@ -582,7 +642,10 @@
                             grant_type: 'client_credentials'
                         })
                     });
-                    if (!tokenRes.ok) return null;
+                    if (!tokenRes.ok) {
+                        setDiag('digikey', false, `Token request failed: HTTP ${tokenRes.status} ${tokenRes.statusText}. Check Client ID/Secret are correct and the app is approved for the Product Information API v4.`);
+                        return null;
+                    }
                     const tokenData = await tokenRes.json();
                     dkAccessToken = tokenData.access_token;
                     dkTokenExpiry = Date.now() + ((tokenData.expires_in || 599) - 30) * 1000;
@@ -602,10 +665,14 @@
                     body: JSON.stringify({ Keywords: mpn, RecordCount: 15 })
                 });
 
-                if (!searchRes.ok) return null;
+                if (!searchRes.ok) {
+                    setDiag('digikey', false, `Search request failed: HTTP ${searchRes.status} ${searchRes.statusText}.`);
+                    return null;
+                }
                 const data = await searchRes.json();
                 const products = data.Products || data.ExactMatches || [];
-                if (products.length === 0) return null;
+                if (products.length === 0) { setDiag('digikey', true, 'Connected -- 0 matching products for that keyword.'); return null; }
+                setDiag('digikey', true, `Connected -- ${products.length} result(s) returned.`);
 
                 const cleanTarget = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
                 const exact = products.find(p =>
@@ -626,6 +693,7 @@
                 parsed.alternates = altCandidates.slice(0, 3);
                 return parsed;
             } catch (err) {
+                setDiag('digikey', false, describeFetchError(err));
                 console.warn("DigiKey API fallback to Mouser:", err);
                 return null;
             }
@@ -684,7 +752,7 @@
         // Priority 2: Mouser Search API v1 (Fixed partSearchOptions to "None" for accurate MFG_PN matching)
         async function fetchFromMouserAPI(mpn, userHints = {}) {
             const apiKey = getActiveMouserKey();
-            if (!apiKey) return null;
+            if (!apiKey) { setDiag('mouser', false, 'No Mouser API key saved. Open the API Keys panel and click "Save Overrides".'); return null; }
 
             try {
                 let parts = [];
@@ -702,6 +770,14 @@
                     if (res.ok) {
                         const data = await res.json();
                         parts = (data.SearchResults && data.SearchResults.Parts) || [];
+                        const errs = (data.Errors || data.SearchResults && data.SearchResults.Errors || []);
+                        if (parts.length === 0 && errs.length) {
+                            setDiag('mouser', false, `Connected, but Mouser returned an error: ${errs.map(e => e.Message || JSON.stringify(e)).join('; ')}`);
+                        } else {
+                            setDiag('mouser', true, `Connected -- partnumber search returned ${parts.length} result(s).`);
+                        }
+                    } else {
+                        setDiag('mouser', false, `Part-number search failed: HTTP ${res.status} ${res.statusText}. Check the API key is correct and approved for Search API v1.`);
                     }
                 }
 
@@ -771,6 +847,7 @@
                 primaryParsed.alternates = altCandidates.slice(0, 3);
                 return primaryParsed;
             } catch (err) {
+                setDiag('mouser', false, describeFetchError(err));
                 console.warn("Mouser API error:", err);
                 return null;
             }
@@ -1191,7 +1268,9 @@
                 tolerance: "—",
                 voltage: "—",
                 package: "—",
-                description: mpn ? `Part "${mpn}" not found in DigiKey/Mouser API or standard EIA database.` : "No MFG_PN found in mapped column for this row.",
+                description: mpn
+                    ? `Part "${mpn}" not found. DigiKey: ${hwApiDiag.digikey.detail} | Mouser: ${hwApiDiag.mouser.detail}`
+                    : "No MFG_PN found in mapped column for this row.",
                 current: "—",
                 polarity: "—",
                 tempRange: "—",
