@@ -125,6 +125,19 @@
             color: #f8fafc;
         }
 
+        .fx-dot {
+            display: inline-block;
+            width: 9px; height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .fx-dot-pending { background: #f59e0b; animation: fxPulse 1s ease-in-out infinite; }
+        .fx-dot-live    { background: #22c55e; animation: fxPulse 2s ease-in-out infinite; }
+        .fx-dot-offline { background: #ef4444; }
+        @keyframes fxPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.55; transform: scale(1.25); }
+        }
         .currency-switch-box select,
         .currency-switch-box input {
             background: #1e293b;
@@ -326,6 +339,13 @@
             white-space: nowrap;
         }
 
+        @keyframes rowFadeIn {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        #auditTableBody tr { animation: rowFadeIn 0.3s ease both; }
+        .btn { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+        .btn:active { transform: scale(0.96); }
         .crisp-table tbody td {
             padding: 10px 12px;
             vertical-align: middle;
@@ -370,8 +390,13 @@
                 </select>
                 <span>Rate 1$ = ₹</span>
                 <input type="number" id="usdToInrRate" value="84.50" step="0.1" style="width: 58px;" onchange="window.dispatchEvent(new CustomEvent('currencyChanged'))">
+                <span id="fxStatusDot" class="fx-dot fx-dot-pending" title="Fetching live rate..."></span>
+                <i class="bi bi-arrow-clockwise" style="cursor:pointer" title="Refresh live rate" onclick="ComponentAgent.fetchLiveExchangeRate()"></i>
             </div>
 
+            <button class="btn btn-sm btn-outline-light" onclick="ComponentAgent.setApiKeys()" title="Your keys are saved only in this browser (localStorage), never in this file">
+                <i class="bi bi-key-fill"></i> API Keys
+            </button>
             <button class="btn btn-sm btn-outline-danger" onclick="window.dispatchEvent(new CustomEvent('resetWorkspace'))">
                 <i class="bi bi-trash3-fill"></i> Reset
             </button>
@@ -522,9 +547,12 @@
  */
 const ComponentAgent = {
     config: {
-        mouserKey: "f7821465-5e59-4e6d-be6d-3c90a4dbdcc8",
-        digikeyClientId: "721KJZkRHjwTno2Vzmd5tepqWmUjGoGJyfduHNMJ66tqL2f9",
-        digikeyClientSecret: "TvMmGwNIbvBzyKTvmI8uITeA65m9sEHJug5AjpZK6UFOmBADRDkjOOlI0mhgyICD",
+        // SECURITY: these must stay blank in the shipped file -- a static HTML page cannot keep a
+        // secret, anyone opening it or viewing source reads these strings directly. Paste real keys
+        // into the API Keys panel in the UI instead; they're kept in this browser's localStorage only.
+        mouserKey: "",
+        digikeyClientId: "",
+        digikeyClientSecret: "",
         defaultLocale: "IN:INR"
     },
 
@@ -537,8 +565,37 @@ const ComponentAgent = {
         auditRecords: []
     },
 
+    // 0. Load any saved keys from this browser's localStorage (never from the file itself)
+    loadSavedKeys() {
+        this.config.mouserKey = localStorage.getItem('ca_mouserKey') || "";
+        this.config.digikeyClientId = localStorage.getItem('ca_dkClientId') || "";
+        this.config.digikeyClientSecret = localStorage.getItem('ca_dkClientSecret') || "";
+    },
+
+    setApiKeys() {
+        const mk = prompt("Mouser Search API Key:", this.config.mouserKey || "");
+        if (mk === null) return; // cancelled
+        const di = prompt("DigiKey Client ID (API v4):", this.config.digikeyClientId || "");
+        if (di === null) return;
+        const ds = prompt("DigiKey Client Secret (OAuth2):", this.config.digikeyClientSecret || "");
+        if (ds === null) return;
+
+        this.config.mouserKey = mk.trim();
+        this.config.digikeyClientId = di.trim();
+        this.config.digikeyClientSecret = ds.trim();
+        localStorage.setItem('ca_mouserKey', this.config.mouserKey);
+        localStorage.setItem('ca_dkClientId', this.config.digikeyClientId);
+        localStorage.setItem('ca_dkClientSecret', this.config.digikeyClientSecret);
+        this.state.dkAccessToken = null; // force a fresh token on next DigiKey call
+
+        const stateEl = document.getElementById('agentStateText');
+        if (stateEl) stateEl.innerText = "API keys saved to this browser • Ready";
+    },
+
     // 1. Live Exchange Rate Auto-Fetcher (Internet Connected)
     async fetchLiveExchangeRate() {
+        const dot = document.getElementById('fxStatusDot');
+        if (dot) { dot.className = 'fx-dot fx-dot-pending'; dot.title = 'Fetching live rate...'; }
         try {
             const res = await fetch('https://open.er-api.com/v6/latest/USD');
             if (res.ok) {
@@ -546,19 +603,24 @@ const ComponentAgent = {
                 if (data && data.rates && data.rates.INR) {
                     this.state.usdToInrRate = parseFloat(data.rates.INR.toFixed(2));
                     this.state.isFxLive = true;
-                    
+
                     const rateInput = document.getElementById('usdToInrRate');
                     if (rateInput) {
                         rateInput.value = this.state.usdToInrRate;
                         rateInput.title = `Live Internet Rate: 1 USD = ₹${this.state.usdToInrRate} (Auto-Updated)`;
                     }
+                    if (dot) { dot.className = 'fx-dot fx-dot-live'; dot.title = `Live rate: 1 USD = ₹${this.state.usdToInrRate}`; }
                     console.log(`[FX Agent] Live USD to INR Rate Loaded: ₹${this.state.usdToInrRate}`);
                     this.recalculateKPIs();
                     window.dispatchEvent(new CustomEvent('renderAuditTable'));
+                    return;
                 }
             }
+            throw new Error(`HTTP ${res.status}`);
         } catch (err) {
-            console.warn("[FX Agent] Could not fetch live rate, using default:", this.state.usdToInrRate, err);
+            this.state.isFxLive = false;
+            if (dot) { dot.className = 'fx-dot fx-dot-offline'; dot.title = `Live rate unavailable (${err.message || err}) -- using manual rate ₹${this.state.usdToInrRate}. Click the refresh icon to retry.`; }
+            console.warn("[FX Agent] Could not fetch live rate, using manual rate:", this.state.usdToInrRate, err);
         }
     },
 
@@ -890,38 +952,32 @@ const ComponentAgent = {
         const pkgSeries = {
             "01005": {
                 murata: { prefix: "GRM022R61A", suffix: "ME01L", mfr: "Murata", lcsc: "C383184" },
-                samsung: { prefix: "CL02A", suffix: "KP2NNNC", mfr: "Samsung", lcsc: "C383185" },
-                tdk: { prefix: "C0402X5R1A", suffix: "020BC", mfr: "TDK", lcsc: "C383186" }
+                samsung: { prefix: "CL02A", suffix: "KP2NNNC", mfr: "Samsung", lcsc: "C383185" }
             },
             "0201": {
                 murata: { prefix: "GRM033R71E", suffix: "KE14D", mfr: "Murata", lcsc: "C31114" },
                 samsung: { prefix: "CL03B", suffix: "KP3NNNC", mfr: "Samsung", lcsc: "C38128" },
-                yageo: { prefix: "CC0201KRX7R8BB", suffix: "", mfr: "YAGEO", lcsc: "C31115" },
-                tdk: { prefix: "C0603X7R1E", suffix: "030BA", mfr: "TDK", lcsc: "C196417" }
+                yageo: { prefix: "CC0201KRX7R8BB", suffix: "", mfr: "YAGEO", lcsc: "C31115" }
             },
             "0402": {
                 murata: { prefix: "GRM155R71E", suffix: "KA01D", mfr: "Murata", lcsc: "C1525" },
                 samsung: { prefix: "CL05B", suffix: "KO5NNNC", mfr: "Samsung", lcsc: "C1523" },
-                yageo: { prefix: "CC0402KRX7R8BB", suffix: "", mfr: "YAGEO", lcsc: "C1524" },
-                tdk: { prefix: "C1005X7R1E", suffix: "050BA", mfr: "TDK", lcsc: "C1526" }
+                yageo: { prefix: "CC0402KRX7R8BB", suffix: "", mfr: "YAGEO", lcsc: "C1524" }
             },
             "0603": {
                 murata: { prefix: "GRM188R71H", suffix: "KA93D", mfr: "Murata", lcsc: "C14663" },
                 samsung: { prefix: "CL10B", suffix: "KB8NNNC", mfr: "Samsung", lcsc: "C15849" },
-                yageo: { prefix: "CC0603KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C14664" },
-                tdk: { prefix: "C1608X7R1H", suffix: "080AA", mfr: "TDK", lcsc: "C15850" }
+                yageo: { prefix: "CC0603KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C14664" }
             },
             "0805": {
                 murata: { prefix: "GRM21BR71H", suffix: "KA01L", mfr: "Murata", lcsc: "C1644" },
                 samsung: { prefix: "CL21B", suffix: "KBANNNC", mfr: "Samsung", lcsc: "C1645" },
-                yageo: { prefix: "CC0805KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C1646" },
-                tdk: { prefix: "C2012X7R1H", suffix: "125AA", mfr: "TDK", lcsc: "C1647" }
+                yageo: { prefix: "CC0805KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C1646" }
             },
             "1206": {
                 murata: { prefix: "GRM31CR71H", suffix: "KA01L", mfr: "Murata", lcsc: "C1814" },
                 samsung: { prefix: "CL31B", suffix: "KBFNNNE", mfr: "Samsung", lcsc: "C1815" },
-                yageo: { prefix: "CC1206KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C1816" },
-                tdk: { prefix: "C3216X7R1H", suffix: "160AA", mfr: "TDK", lcsc: "C1817" }
+                yageo: { prefix: "CC1206KRX7R9BB", suffix: "", mfr: "YAGEO", lcsc: "C1816" }
             }
         };
 
@@ -1146,6 +1202,7 @@ const ComponentAgent = {
 
 // Global Event Listeners & Startup Auto-FX Fetch
 window.addEventListener('DOMContentLoaded', () => {
+    ComponentAgent.loadSavedKeys();
     ComponentAgent.fetchLiveExchangeRate();
 });
 
