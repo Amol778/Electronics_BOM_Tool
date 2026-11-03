@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BOM Analysis and Component Selection</title>
+    <title>Hardware Design Guide — Component Intelligence & Sourcing Suite</title>
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -514,14 +514,13 @@
         }
     </script>
 <!-- ========================================================================= -->
-<!-- SECTION 2: COMPONENT INTELLIGENCE AGENT FRAMEWORK                         -->
+<!-- SECTION 2: COMPONENT INTELLIGENCE AGENT FRAMEWORK (FIXED CURRENCY & SPECS) -->
 <!-- ========================================================================= -->
 <script>
 /**
  * Component Intelligence Agent Namespace
  */
 const ComponentAgent = {
-    // 1. Credentials Configuration
     config: {
         mouserKey: "f7821465-5e59-4e6d-be6d-3c90a4dbdcc8",
         digikeyClientId: "721KJZkRHjwTno2Vzmd5tepqWmUjGoGJyfduHNMJ66tqL2f9",
@@ -529,7 +528,6 @@ const ComponentAgent = {
         defaultLocale: "IN:INR"
     },
 
-    // Session State
     state: {
         dkAccessToken: null,
         dkTokenExpiry: 0,
@@ -538,73 +536,91 @@ const ComponentAgent = {
         auditRecords: []
     },
 
-    // 2. Verified Multi-Category Reference Database & Cross-Manufacturer Signatures
-    referenceCatalog: {
-        "STM32F103C8T6": {
-            catGroup: "MCU", type: "32-Bit ARM Cortex-M3 MCU", mfr: "STMicroelectronics",
-            val: "72MHz Cortex-M3", tol: "64KB Flash / 20KB RAM", volt: "3.3V (2.0V~3.6V)", pkg: "LQFP-48",
-            curr: "37 GPIO, USB, CAN", pol: "10x12-bit ADC", temp: "-40°C to +85°C",
-            desc: "IC MCU 32BIT 64KB FLASH 48LQFP ARM Cortex-M3 72MHz", priceUsd: 1.65,
-            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
-            alternates: [
-                { mpn: "GD32F103C8T6", mfr: "GigaDevice", source: "LCSC / JLCPCB", lcscCode: "C24305", priceUsd: 0.92, specs: "Pin-Compatible Cortex-M3 | 108MHz | 64KB Flash | LQFP-48" },
-                { mpn: "APM32F103C8T6", mfr: "Geehy Semiconductor", source: "LCSC / DigiKey", lcscCode: "C506932", priceUsd: 0.85, specs: "Pin-Compatible Cortex-M3 | 96MHz | 64KB Flash | LQFP-48" },
-                { mpn: "CH32F103C8T6", mfr: "WCH", source: "JLCPCB / LCSC", lcscCode: "C434517", priceUsd: 0.78, specs: "Pin-Compatible Cortex-M3 | 72MHz | 64KB Flash | LQFP-48" },
-                { mpn: "AT32F403ACGU7", mfr: "Artery", source: "Mouser / LCSC", lcscCode: "C508420", priceUsd: 1.18, specs: "32-Bit ARM MCU | 64KB+ Flash | 3.3V | 48-Pin" }
-            ]
+    // 1. Comprehensive Multi-Pass Parametric Extractor from Raw Description & Strings
+    paramExtractor: {
+        extractValue(desc, cat = "") {
+            if (!desc) return "—";
+            const text = `${desc} ${cat}`;
+            
+            // Capacitors (e.g., 100nF, 0.1uF, 10uF, 47pF, 2.2uF)
+            const capMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(pF|nF|uF|µF|mF)\b/i);
+            if (capMatch) return capMatch[1] + capMatch[2].replace('µ', 'u');
+            
+            // Inductors (e.g., 10uH, 4.7nH, 100mH)
+            const indMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(nH|uH|µH|mH)\b/i);
+            if (indMatch) return indMatch[1] + indMatch[2].replace('µ', 'u');
+
+            // Resistors (e.g., 10K OHM, 4.7K, 100R, 0 OHM, 2.2M, 49.9 OHM)
+            const resMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(kOhm|MOhm|Ohms|Ohm|kΩ|MΩ|Ω)\b/i);
+            if (resMatch) {
+                let u = resMatch[2].replace(/ohms?/i, 'Ω').replace(/^k/i, 'k').replace(/^m/i, 'M');
+                return resMatch[1] + u;
+            }
+            const rkmMatch = text.match(/\b(\d+)([RKM])(\d*)\b/);
+            if (rkmMatch && !/GRM|CL\d|CRCW/i.test(rkmMatch[0])) {
+                const u = rkmMatch[2] === 'R' ? 'Ω' : (rkmMatch[2] === 'K' ? 'kΩ' : 'MΩ');
+                return rkmMatch[3] ? `${rkmMatch[1]}.${rkmMatch[3]}${u}` : `${rkmMatch[1]}${u}`;
+            }
+
+            // Frequency (e.g., 72MHz, 16MHz, 8.000MHz)
+            const freqMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(MHz|kHz|GHz)\b/i);
+            if (freqMatch) return freqMatch[0];
+
+            // Memory Density (e.g., 128Mbit, 64KB, 16MB)
+            const memMatch = text.match(/\b(\d+)\s*(Mbit|Gbit|Kbit|MB|KB|GB)\b/i);
+            if (memMatch) return memMatch[0];
+
+            return "—";
         },
-        "ATMEGA328P-AU": {
-            catGroup: "MCU", type: "8-Bit AVR Microcontroller", mfr: "Microchip Technology",
-            val: "20MHz 8-Bit AVR", tol: "32KB Flash / 2KB SRAM", volt: "5V (1.8V~5.5V)", pkg: "TQFP-32",
-            curr: "23 GPIO, SPI, I2C", pol: "8x10-bit ADC", temp: "-40°C to +85°C",
-            desc: "IC MCU 8BIT 32KB FLASH 32TQFP AVR 20MHz", priceUsd: 2.15,
-            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
-            alternates: [
-                { mpn: "LGT8F328P-LQFP32", mfr: "LogicGreen", source: "LCSC / JLCPCB", lcscCode: "C508198", priceUsd: 0.58, specs: "Pin-Compatible 8-Bit AVR | 32MHz | 32KB Flash | TQFP-32" },
-                { mpn: "STM8S005K6T6C", mfr: "STMicroelectronics", source: "DigiKey / Mouser", lcscCode: "C18715", priceUsd: 0.75, specs: "8-Bit MCU | 16MHz | 32KB Flash | 5V | LQFP-32" },
-                { mpn: "N76E003AT20", mfr: "Nuvoton", source: "DigiKey / LCSC", lcscCode: "C90466", priceUsd: 0.45, specs: "8-Bit 8051 MCU | 18KB Flash | 5V | TSSOP-20" }
-            ]
+
+        extractTolerance(desc) {
+            if (!desc) return "—";
+            const tolMatch = desc.match(/(?:±|\+\/-)?\s*(\d+(?:\.\d+)?)\s*%/);
+            if (tolMatch) return `±${tolMatch[1]}%`;
+            if (/\b(1\/20W|1\/16W|1\/10W|1\/8W|1\/4W|1\/2W|1W)\b/i.test(desc)) {
+                const p = desc.match(/\b(1\/20W|1\/16W|1\/10W|1\/8W|1\/4W|1\/2W|1W)\b/i);
+                return p ? p[0].toUpperCase() : "—";
+            }
+            return "—";
         },
-        "W25Q128JVSIQ": {
-            catGroup: "MEMORY", type: "Serial NOR Flash Memory", mfr: "Winbond Electronics",
-            val: "128Mbit (16MB)", tol: "Quad-SPI @ 133MHz", volt: "3.3V (2.7V~3.6V)", pkg: "SOIC-8",
-            curr: "16M x 8", pol: "Non-Volatile NOR", temp: "-40°C to +85°C",
-            desc: "IC FLASH 128MBIT SPI/QUAD 133MHZ 8SOIC", priceUsd: 0.98,
-            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
-            alternates: [
-                { mpn: "GD25Q128ESIG", mfr: "GigaDevice", source: "LCSC / DigiKey", lcscCode: "C284527", priceUsd: 0.68, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOIC-8" },
-                { mpn: "MX25L12833FM2I-10G", mfr: "Macronix", source: "DigiKey / Mouser", lcscCode: "C134053", priceUsd: 1.05, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOP-8" },
-                { mpn: "IS25LP128F-JBLE", mfr: "ISSI", source: "Mouser / DigiKey", lcscCode: "C426198", priceUsd: 1.12, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOIC-8" }
-            ]
+
+        extractVoltage(desc) {
+            if (!desc) return "—";
+            const voltMatch = desc.match(/\b(\d+(?:\.\d+)?)\s*(VDC|VAC|kV|V)\b/i);
+            if (voltMatch) return voltMatch[1] + voltMatch[2].toUpperCase().replace('VDC', 'V');
+            return "—";
         },
-        "AMS1117-3.3": {
-            catGroup: "POWER", type: "LDO Linear Voltage Regulator", mfr: "Advanced Monolithic Systems",
-            val: "3.3V Fixed", tol: "1A Max (±1.5%)", volt: "15V Max Vin", pkg: "SOT-223",
-            curr: "1.1V Dropout @ 1A", pol: "Positive Fixed", temp: "-40°C to +125°C",
-            desc: "IC REG LINEAR 3.3V 1A SOT223 Low Dropout Regulator", priceUsd: 0.08,
-            primarySource: "LCSC / JLCPCB", badgeClass: "dist-lcsc",
-            alternates: [
-                { mpn: "LM1117IMPX-3.3/NOPB", mfr: "Texas Instruments", source: "DigiKey / Mouser", lcscCode: "C8746", priceUsd: 0.42, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" },
-                { mpn: "LD1117S33TR", mfr: "STMicroelectronics", source: "DigiKey / RS PRO", lcscCode: "C8544", priceUsd: 0.28, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" },
-                { mpn: "NCP1117ST33T3G", mfr: "onsemi", source: "Mouser / DigiKey", lcscCode: "C14302", priceUsd: 0.24, specs: "3.3V Fixed LDO | 1A | 20V Max Vin | SOT-223" }
-            ]
-        },
-        "BSS138": {
-            catGroup: "SEMI", type: "N-Channel Logic Level MOSFET", mfr: "onsemi",
-            val: "220mA Id", tol: "Rds(on) 3.5Ω @ 5V", volt: "50V Vds", pkg: "SOT-23-3",
-            curr: "360mW Power", pol: "N-Channel MOSFET", temp: "-55°C to +150°C",
-            desc: "MOSFET N-CH 50V 220MA SOT-23 Logic Level", priceUsd: 0.04,
-            primarySource: "DigiKey / Mouser", badgeClass: "dist-mouser",
-            alternates: [
-                { mpn: "BSS138W-7-F", mfr: "Diodes Incorporated", source: "DigiKey / Mouser", lcscCode: "C19280", priceUsd: 0.035, specs: "N-Ch MOSFET | 200mA | 50V Vds | 3.5Ω | SOT-23" },
-                { mpn: "BSS138P,215", mfr: "Nexperia", source: "DigiKey / RS PRO", lcscCode: "C82104", priceUsd: 0.038, specs: "N-Ch MOSFET | 360mA | 60V Vds | 1.6Ω | SOT-23" },
-                { mpn: "2N7002K-T1-GE3", mfr: "Vishay Siliconix", source: "Mouser / DigiKey", lcscCode: "C21480", priceUsd: 0.042, specs: "N-Ch MOSFET | 300mA | 60V Vds | 2Ω | SOT-23" }
-            ]
+
+        extractPackage(desc, mpn = "") {
+            const text = `${desc} ${mpn}`.toUpperCase();
+            const pkgMatch = text.match(/\b(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512|LQFP-\d+|QFN-\d+|TQFP-\d+|TSSOP-\d+|MSOP-\d+|SOIC-\d+|SOP-\d+|SOT-23(?:-\d)?|SOT-223|SOT-89|TO-252|TO-220|SOD-\d+|SMA|SMB|SMC|DO-214[A-Z]{2})\b/);
+            if (pkgMatch) return pkgMatch[1];
+            return "—";
         }
     },
 
-    // 3. Currency Calculation Methods
+    // 2. Fixed Currency Conversion Engine (Prevents Double Conversion)
     currencyUtils: {
+        parseToUsdBase(rawPrice, currencyHint = "USD") {
+            if (rawPrice === null || rawPrice === undefined) return 0.05;
+            if (typeof rawPrice === 'number') {
+                if (currencyHint.toUpperCase() === 'INR') {
+                    return rawPrice / ComponentAgent.state.usdToInrRate;
+                }
+                return rawPrice;
+            }
+
+            const cleanStr = String(rawPrice).trim();
+            const num = parseFloat(cleanStr.replace(/[^0-9.]/g, ''));
+            if (isNaN(num) || num <= 0) return 0.05;
+
+            // Detect if the returned price is natively in INR
+            if (cleanStr.includes('₹') || cleanStr.toUpperCase().includes('INR') || currencyHint.toUpperCase() === 'INR') {
+                return num / ComponentAgent.state.usdToInrRate;
+            }
+            return num;
+        },
+
         formatPrice(usdAmount) {
             if (!usdAmount || isNaN(usdAmount) || usdAmount <= 0) return "Check Web";
             const curr = ComponentAgent.state.currency;
@@ -615,22 +631,70 @@ const ComponentAgent = {
             } else {
                 return usdAmount < 0.1 ? `$${usdAmount.toFixed(4)}` : `$${usdAmount.toFixed(2)}`;
             }
-        },
-
-        parseRawPriceToUsd(rawStr) {
-            if (rawStr === null || rawStr === undefined) return null;
-            if (typeof rawStr === 'number') return rawStr;
-            const clean = String(rawStr).trim();
-            const num = parseFloat(clean.replace(/[^0-9.]/g, ''));
-            if (isNaN(num) || num <= 0) return null;
-            if (clean.includes('₹') || clean.toUpperCase().includes('INR')) {
-                return num / ComponentAgent.state.usdToInrRate;
-            }
-            return num;
         }
     },
 
-    // 4. DigiKey API v4 Driver
+    // 3. Known Engineering Reference Database
+    referenceCatalog: {
+        "STM32F103C8T6": {
+            catGroup: "MCU", type: "32-Bit ARM Cortex-M3 MCU", mfr: "STMicroelectronics",
+            val: "72MHz Cortex-M3", tol: "64KB Flash / 20KB RAM", volt: "3.3V (2.0V~3.6V)", pkg: "LQFP-48",
+            curr: "37 GPIO, USB, CAN", pol: "10x12-bit ADC", temp: "-40°C to +85°C",
+            desc: "IC MCU 32BIT 64KB FLASH 48LQFP ARM Cortex-M3 72MHz", priceUsd: 1.65,
+            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
+            alternates: [
+                { mpn: "GD32F103C8T6", mfr: "GigaDevice", source: "LCSC / JLCPCB", lcscCode: "C24305", priceUsd: 0.92, specs: "Pin-Compatible Cortex-M3 | 108MHz | 64KB Flash | LQFP-48" },
+                { mpn: "APM32F103C8T6", mfr: "Geehy Semiconductor", source: "LCSC / DigiKey", lcscCode: "C506932", priceUsd: 0.85, specs: "Pin-Compatible Cortex-M3 | 96MHz | 64KB Flash | LQFP-48" },
+                { mpn: "CH32F103C8T6", mfr: "WCH", source: "JLCPCB / LCSC", lcscCode: "C434517", priceUsd: 0.78, specs: "Pin-Compatible Cortex-M3 | 72MHz | 64KB Flash | LQFP-48" }
+            ]
+        },
+        "ATMEGA328P-AU": {
+            catGroup: "MCU", type: "8-Bit AVR Microcontroller", mfr: "Microchip Technology",
+            val: "20MHz 8-Bit AVR", tol: "32KB Flash / 2KB SRAM", volt: "5V (1.8V~5.5V)", pkg: "TQFP-32",
+            curr: "23 GPIO, SPI, I2C", pol: "8x10-bit ADC", temp: "-40°C to +85°C",
+            desc: "IC MCU 8BIT 32KB FLASH 32TQFP AVR 20MHz", priceUsd: 2.15,
+            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
+            alternates: [
+                { mpn: "LGT8F328P-LQFP32", mfr: "LogicGreen", source: "LCSC / JLCPCB", lcscCode: "C508198", priceUsd: 0.58, specs: "Pin-Compatible 8-Bit AVR | 32MHz | 32KB Flash | TQFP-32" },
+                { mpn: "STM8S005K6T6C", mfr: "STMicroelectronics", source: "DigiKey / Mouser", lcscCode: "C18715", priceUsd: 0.75, specs: "8-Bit MCU | 16MHz | 32KB Flash | 5V | LQFP-32" }
+            ]
+        },
+        "W25Q128JVSIQ": {
+            catGroup: "MEMORY", type: "Serial NOR Flash Memory", mfr: "Winbond Electronics",
+            val: "128Mbit (16MB)", tol: "Quad-SPI @ 133MHz", volt: "3.3V (2.7V~3.6V)", pkg: "SOIC-8",
+            curr: "16M x 8", pol: "Non-Volatile NOR", temp: "-40°C to +85°C",
+            desc: "IC FLASH 128MBIT SPI/QUAD 133MHZ 8SOIC", priceUsd: 0.98,
+            primarySource: "DigiKey / Mouser", badgeClass: "dist-digikey",
+            alternates: [
+                { mpn: "GD25Q128ESIG", mfr: "GigaDevice", source: "LCSC / DigiKey", lcscCode: "C284527", priceUsd: 0.68, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOIC-8" },
+                { mpn: "MX25L12833FM2I-10G", mfr: "Macronix", source: "DigiKey / Mouser", lcscCode: "C134053", priceUsd: 1.05, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOP-8" }
+            ]
+        },
+        "AMS1117-3.3": {
+            catGroup: "POWER", type: "LDO Linear Voltage Regulator", mfr: "Advanced Monolithic Systems",
+            val: "3.3V Fixed", tol: "1A Max (±1.5%)", volt: "15V Max Vin", pkg: "SOT-223",
+            curr: "1.1V Dropout @ 1A", pol: "Positive Fixed", temp: "-40°C to +125°C",
+            desc: "IC REG LINEAR 3.3V 1A SOT223 Low Dropout Regulator", priceUsd: 0.08,
+            primarySource: "LCSC / JLCPCB", badgeClass: "dist-lcsc",
+            alternates: [
+                { mpn: "LM1117IMPX-3.3/NOPB", mfr: "Texas Instruments", source: "DigiKey / Mouser", lcscCode: "C8746", priceUsd: 0.42, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" },
+                { mpn: "LD1117S33TR", mfr: "STMicroelectronics", source: "DigiKey / RS PRO", lcscCode: "C8544", priceUsd: 0.28, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" }
+            ]
+        },
+        "BSS138": {
+            catGroup: "SEMI", type: "N-Channel Logic Level MOSFET", mfr: "onsemi",
+            val: "220mA Id", tol: "Rds(on) 3.5Ω @ 5V", volt: "50V Vds", pkg: "SOT-23-3",
+            curr: "360mW Power", pol: "N-Channel MOSFET", temp: "-55°C to +150°C",
+            desc: "MOSFET N-CH 50V 220MA SOT-23 Logic Level", priceUsd: 0.04,
+            primarySource: "DigiKey / Mouser", badgeClass: "dist-mouser",
+            alternates: [
+                { mpn: "BSS138W-7-F", mfr: "Diodes Incorporated", source: "DigiKey / Mouser", lcscCode: "C19280", priceUsd: 0.035, specs: "N-Ch MOSFET | 200mA | 50V Vds | 3.5Ω | SOT-23" },
+                { mpn: "BSS138P,215", mfr: "Nexperia", source: "DigiKey / RS PRO", lcscCode: "C82104", priceUsd: 0.038, specs: "N-Ch MOSFET | 360mA | 60V Vds | 1.6Ω | SOT-23" }
+            ]
+        }
+    },
+
+    // 4. DigiKey API Driver
     async fetchDigiKey(mpn) {
         if (!mpn || !this.config.digikeyClientId || !this.config.digikeyClientSecret) return null;
         try {
@@ -672,31 +736,37 @@ const ComponentAgent = {
             const targetNorm = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
             const exact = products.find(p => (p.ManufacturerProductNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === targetNorm) || products[0];
 
-            let unitPriceUsd = 0.15;
-            if (exact.UnitPrice) unitPriceUsd = this.currencyUtils.parseRawPriceToUsd(exact.UnitPrice);
-            else if (exact.StandardPricing && exact.StandardPricing.length > 0) {
-                unitPriceUsd = this.currencyUtils.parseRawPriceToUsd(exact.StandardPricing[0].UnitPrice);
+            // Normalize Returned INR Price to USD Base
+            let rawPrice = exact.UnitPrice;
+            if (!rawPrice && exact.StandardPricing && exact.StandardPricing.length > 0) {
+                rawPrice = exact.StandardPricing[0].UnitPrice;
             }
+            const unitPriceUsd = this.currencyUtils.parseToUsdBase(rawPrice, "INR");
+            const desc = (exact.Description && exact.Description.ProductDescription) || "";
+            const cat = (exact.Category && exact.Category.Name) || "";
 
             return {
                 found: true,
                 mpn: exact.ManufacturerProductNumber || mpn,
                 mfr: (exact.Manufacturer && exact.Manufacturer.Name) ? exact.Manufacturer.Name : "Verified Mfr",
-                type: (exact.Category && exact.Category.Name) ? exact.Category.Name : "Component",
-                desc: (exact.Description && exact.Description.ProductDescription) || "DigiKey Official Catalog",
-                priceUsd: unitPriceUsd || 0.15,
+                type: cat || "Component",
+                desc: desc || "DigiKey Official Catalog",
+                val: this.paramExtractor.extractValue(desc, cat),
+                tol: this.paramExtractor.extractTolerance(desc),
+                volt: this.paramExtractor.extractVoltage(desc),
+                pkg: this.paramExtractor.extractPackage(desc, exact.ManufacturerProductNumber),
+                priceUsd: unitPriceUsd,
                 primarySource: "DigiKey API v4",
                 badgeClass: "dist-digikey",
-                productUrl: exact.ProductUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(mpn)}`,
-                datasheetUrl: exact.DatasheetUrl || ""
+                productUrl: exact.ProductUrl || `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(mpn)}`
             };
         } catch (err) {
-            console.warn("Agent DigiKey API Fallback:", err);
+            console.warn("DigiKey API fallback:", err);
             return null;
         }
     },
 
-    // 5. Mouser Search API v1 Driver
+    // 5. Mouser API Driver
     async fetchMouser(mpn) {
         if (!mpn || !this.config.mouserKey) return null;
         try {
@@ -716,30 +786,36 @@ const ComponentAgent = {
             const targetNorm = mpn.toUpperCase().replace(/[^A-Z0-9]/g, '');
             let matchedPart = parts.find(p => (p.ManufacturerPartNumber || '').toUpperCase().replace(/[^A-Z0-9]/g, '') === targetNorm) || parts[0];
 
-            let unitPriceUsd = 0.15;
+            let rawPrice = null;
             if (matchedPart.PriceBreaks && matchedPart.PriceBreaks.length > 0) {
-                unitPriceUsd = this.currencyUtils.parseRawPriceToUsd(matchedPart.PriceBreaks[0].Price);
+                rawPrice = matchedPart.PriceBreaks[0].Price;
             }
+            const unitPriceUsd = this.currencyUtils.parseToUsdBase(rawPrice, "USD");
+            const desc = matchedPart.Description || "";
+            const cat = matchedPart.Category || "";
 
             return {
                 found: true,
                 mpn: matchedPart.ManufacturerPartNumber || mpn,
                 mfr: matchedPart.Manufacturer || "Verified Mfr",
-                type: matchedPart.Category || "Component",
-                desc: matchedPart.Description || "Mouser Official Catalog",
-                priceUsd: unitPriceUsd || 0.15,
+                type: cat || "Component",
+                desc: desc || "Mouser Official Catalog",
+                val: this.paramExtractor.extractValue(desc, cat),
+                tol: this.paramExtractor.extractTolerance(desc),
+                volt: this.paramExtractor.extractVoltage(desc),
+                pkg: this.paramExtractor.extractPackage(desc, matchedPart.ManufacturerPartNumber),
+                priceUsd: unitPriceUsd,
                 primarySource: "Mouser API v1",
                 badgeClass: "dist-mouser",
-                productUrl: matchedPart.ProductDetailUrl || `https://www.mouser.in/c/?q=${encodeURIComponent(mpn)}`,
-                datasheetUrl: matchedPart.DataSheetUrl || ""
+                productUrl: matchedPart.ProductDetailUrl || `https://www.mouser.in/c/?q=${encodeURIComponent(mpn)}`
             };
         } catch (err) {
-            console.warn("Agent Mouser API Fallback:", err);
+            console.warn("Mouser API fallback:", err);
             return null;
         }
     },
 
-    // 6. EIA/IEC Standard Passive Decoder
+    // 6. EIA/IEC Passive Decoder
     decodePassive(mpn) {
         const clean = (mpn || "").trim().toUpperCase();
         let recognized = false;
@@ -755,22 +831,29 @@ const ComponentAgent = {
             recognized = true; mfr = "Murata"; type = "MLCC Capacitor";
             const size = clean.slice(3, 5);
             pkg = { "15": "0402", "18": "0603", "21": "0805", "31": "1206" }[size] || "0603";
+            const cCode = clean.slice(10, 13);
+            if (/^\d{3}$/.test(cCode)) {
+                const pf = parseInt(cCode.slice(0, 2), 10) * Math.pow(10, parseInt(cCode[2], 10));
+                val = pf >= 1e6 ? (pf/1e6) + "uF" : (pf >= 1e3 ? (pf/1e3) + "nF" : pf + "pF");
+            }
         }
         // Samsung MLCC
         else if (/^CL(05|10|21|31)/i.test(clean)) {
             recognized = true; mfr = "Samsung"; type = "MLCC Capacitor";
             const size = clean.slice(2, 4);
             pkg = { "05": "0402", "10": "0603", "21": "0805", "31": "1206" }[size] || "0603";
+            const cCode = clean.slice(5, 8);
+            if (/^\d{3}$/.test(cCode)) {
+                const pf = parseInt(cCode.slice(0, 2), 10) * Math.pow(10, parseInt(cCode[2], 10));
+                val = pf >= 1e6 ? (pf/1e6) + "uF" : (pf >= 1e3 ? (pf/1e3) + "nF" : pf + "pF");
+            }
         }
         // Yageo Resistor
         else if (/^RC(0402|0603|0805|1206)/i.test(clean)) {
             recognized = true; mfr = "YAGEO"; type = "Chip Resistor"; tol = "±1%";
             pkg = clean.slice(2, 6);
-        }
-        // Vishay Resistor
-        else if (/^CRCW(0402|0603|0805|1206)/i.test(clean)) {
-            recognized = true; mfr = "Vishay"; type = "Chip Resistor"; tol = "±1%";
-            pkg = clean.slice(4, 8);
+            const rPart = (clean.split('-')[1] || "").replace(/[LP]$/i, '');
+            if (rPart) val = rPart;
         }
 
         return { recognized, mfr, type, val, tol, volt, pkg, priceUsd: 0.012 };
@@ -791,24 +874,21 @@ const ComponentAgent = {
             { mpn: "CC0603KRX7R9BB104", mfr: "YAGEO", source: "LCSC / JLCPCB", lcscCode: "C14663", priceUsd: 0.008, specs: `${val} | ${volt} | ${pkg} | ${tol}` }
         ];
 
-        // Filter: Strictly exclude the target manufacturer and target MPN
         return masterCandidates.filter(c => {
             const candMfr = c.mfr.toLowerCase();
             return !candMfr.includes(mfrLower) && !mfrLower.includes(candMfr) && c.mpn.toUpperCase() !== targetMpn.toUpperCase();
         }).slice(0, 3);
     },
 
-    // 8. Main Agent Entry Point: Inspects Single Part or BOM Row
+    // 8. Main Agent Entry Point
     async inspectComponent(inputParams) {
         const cleanMpn = (inputParams.mpn || "").trim().toUpperCase();
         const userMfr = (inputParams.mfr || "").trim();
 
-        // Step A: Check Reference DB
+        // Check Reference DB
         if (cleanMpn && this.referenceCatalog[cleanMpn]) {
             const ref = this.referenceCatalog[cleanMpn];
             const effMfr = userMfr || ref.mfr;
-            const validAlts = ref.alternates.filter(a => !a.mfr.toLowerCase().includes(effMfr.toLowerCase()));
-
             return {
                 found: true,
                 mpn: cleanMpn,
@@ -826,18 +906,18 @@ const ComponentAgent = {
                 primarySource: ref.primarySource,
                 badgeClass: ref.badgeClass,
                 productUrl: `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(cleanMpn)}`,
-                alternates: validAlts
+                alternates: ref.alternates.filter(a => !a.mfr.toLowerCase().includes(effMfr.toLowerCase()))
             };
         }
 
-        // Step B: Query Live DigiKey API v4
+        // Query Live DigiKey
         const dkResult = await this.fetchDigiKey(cleanMpn);
         if (dkResult && dkResult.found) {
             const effMfr = userMfr || dkResult.mfr;
-            dkResult.val = inputParams.p1 || "See Datasheet";
-            dkResult.tol = inputParams.p2 || "—";
-            dkResult.volt = inputParams.p3 || "—";
-            dkResult.pkg = inputParams.package || "SMD";
+            if (dkResult.val === "—" && inputParams.p1) dkResult.val = inputParams.p1;
+            if (dkResult.pkg === "—" && inputParams.package) dkResult.pkg = inputParams.package;
+            if (dkResult.volt === "—" && inputParams.p3) dkResult.volt = inputParams.p3;
+            if (dkResult.tol === "—" && inputParams.p2) dkResult.tol = inputParams.p2;
             dkResult.curr = inputParams.p5 || "—";
             dkResult.pol = inputParams.p6 || "—";
             dkResult.temp = inputParams.p7 || "-40°C to +85°C";
@@ -845,14 +925,14 @@ const ComponentAgent = {
             return dkResult;
         }
 
-        // Step C: Query Live Mouser API v1
+        // Query Live Mouser
         const msResult = await this.fetchMouser(cleanMpn);
         if (msResult && msResult.found) {
             const effMfr = userMfr || msResult.mfr;
-            msResult.val = inputParams.p1 || "See Datasheet";
-            msResult.tol = inputParams.p2 || "—";
-            msResult.volt = inputParams.p3 || "—";
-            msResult.pkg = inputParams.package || "SMD";
+            if (msResult.val === "—" && inputParams.p1) msResult.val = inputParams.p1;
+            if (msResult.pkg === "—" && inputParams.package) msResult.pkg = inputParams.package;
+            if (msResult.volt === "—" && inputParams.p3) msResult.volt = inputParams.p3;
+            if (msResult.tol === "—" && inputParams.p2) msResult.tol = inputParams.p2;
             msResult.curr = inputParams.p5 || "—";
             msResult.pol = inputParams.p6 || "—";
             msResult.temp = inputParams.p7 || "-40°C to +85°C";
@@ -860,7 +940,7 @@ const ComponentAgent = {
             return msResult;
         }
 
-        // Step D: Standard EIA Passive Decoder
+        // EIA Passive Decoder Fallback
         const passive = this.decodePassive(cleanMpn);
         if (passive.recognized) {
             const effMfr = userMfr || passive.mfr;
@@ -869,14 +949,14 @@ const ComponentAgent = {
                 mpn: cleanMpn,
                 mfr: passive.mfr,
                 type: passive.type,
-                val: inputParams.p1 || passive.val,
-                tol: inputParams.p2 || passive.tol,
-                volt: inputParams.p3 || passive.volt,
-                pkg: inputParams.package || passive.pkg,
+                val: passive.val !== "—" ? passive.val : (inputParams.p1 || "—"),
+                tol: passive.tol,
+                volt: passive.volt,
+                pkg: passive.pkg,
                 curr: inputParams.p5 || "—",
                 pol: "Non-Polarized",
                 temp: "-55°C to +125°C",
-                desc: `${passive.type} ${inputParams.p1 || ''} ${pkg}`,
+                desc: `${passive.type} ${passive.val} ${passive.volt} ${passive.pkg}`,
                 priceUsd: passive.priceUsd,
                 primarySource: "DigiKey / LCSC",
                 badgeClass: "dist-lcsc",
@@ -885,7 +965,7 @@ const ComponentAgent = {
             };
         }
 
-        // Step E: Not Found
+        // Not Found
         return {
             found: false,
             mpn: cleanMpn || "UNSPECIFIED",
@@ -926,17 +1006,16 @@ const ComponentAgent = {
             };
         };
 
-        const p1Check = checkField(inputParams.p1, fetched.val, "Primary Spec");
-        const p2Check = checkField(inputParams.p2, fetched.tol, "Tolerance/Memory");
-        const p3Check = checkField(inputParams.p3, fetched.volt, "Voltage/Supply");
-        const pkgCheck = checkField(inputParams.package, fetched.pkg, "Package/Footprint");
+        const p1Check = checkField(inputParams.p1, fetched.val, "Primary Spec / Value");
+        const p2Check = checkField(inputParams.p2, fetched.tol, "Tolerance");
+        const p3Check = checkField(inputParams.p3, fetched.volt, "Voltage");
+        const pkgCheck = checkField(inputParams.package, fetched.pkg, "Package");
 
         let status = fetched.found ? (mismatches.length > 0 ? "Mismatch Found" : "Verified Clean") : "Part Not Found";
-
         return { p1Check, p2Check, p3Check, pkgCheck, mismatches, status };
     },
 
-    // 10. KPI Dashboard Recalculation
+    // 10. Recalculate KPI Dashboard
     recalculateKPIs() {
         const records = this.state.auditRecords;
         const total = records.length;
@@ -959,7 +1038,6 @@ const ComponentAgent = {
     }
 };
 
-// Global Event Listeners for Currency & Reset
 window.addEventListener('currencyChanged', () => {
     ComponentAgent.state.currency = document.getElementById('globalCurrency').value;
     ComponentAgent.state.usdToInrRate = parseFloat(document.getElementById('usdToInrRate').value) || 84.50;
@@ -973,6 +1051,8 @@ window.addEventListener('resetWorkspace', () => {
     const tbody = document.getElementById('auditTableBody');
     if (tbody) tbody.innerHTML = '';
     document.getElementById('resultsCardWrapper').classList.add('d-none');
+    const summaryArea = document.getElementById('bomExecutiveSummaryArea');
+    if (summaryArea) summaryArea.classList.add('d-none');
 });
 </script>
 <!-- ========================================================================= -->
@@ -983,7 +1063,6 @@ window.addEventListener('resetWorkspace', () => {
  * Section 3: Manual UI Controller & Table Renderer
  */
 const ManualEntryUI = {
-    // 1. Dynamic Parameter Field Definitions
     schemas: {
         PASSIVE: {
             subLabel: "Passive Component Type", subPlace: "e.g., MLCC Ceramic Capacitor, Thick Film Chip Resistor",
@@ -991,58 +1070,57 @@ const ManualEntryUI = {
             p2: "2. Tolerance / Precision", p2P: "e.g., ±10%, ±1%, ±5%", thP2: "Tolerance",
             p3: "3. Voltage Rating", p3P: "e.g., 50V, 16V, 6.3V", thP3: "Voltage Rating",
             p4: "4. Footprint / Package", p4P: "e.g., 0603, 0402, 0805, 1206",
-            p5: "5. Power / Saturation Current", p5P: "e.g., 0.1W (1/10W), 1.5A Isat",
-            p6: "6. Dielectric / Polarity", p6P: "e.g., X7R, C0G/NP0, Non-Polarized",
+            p5: "5. Power / Saturation Current", p5P: "e.g., 0.1W, 1.5A",
+            p6: "6. Dielectric / Polarity", p6P: "e.g., X7R, Non-Polarized",
             p7: "7. Operating Temp Range", p7P: "e.g., -55°C to +125°C",
-            p8: "8. Grade / Additional Details", p8P: "e.g., AEC-Q200 Qualified, Low ESR"
+            p8: "8. Details / Notes", p8P: "e.g., AEC-Q200, Low ESR"
         },
         MCU: {
             subLabel: "MCU / MPU Core Architecture", subPlace: "e.g., 32-Bit ARM Cortex-M3, 8-Bit AVR",
-            p1: "1. Core & Clock Speed", p1P: "e.g., Cortex-M3 @ 72MHz, 20MHz AVR", thP1: "Core & Clock",
+            p1: "1. Core & Clock Speed", p1P: "e.g., Cortex-M3 @ 72MHz", thP1: "Core & Clock",
             p2: "2. Program Flash / RAM Size", p2P: "e.g., 64KB Flash / 20KB SRAM", thP2: "Flash / RAM",
-            p3: "3. Supply Voltage (Vcc)", p3P: "e.g., 2.0V to 3.6V, 5V", thP3: "Supply Vcc",
-            p4: "4. Package / Pin Count", p4P: "e.g., LQFP-48, QFN-32, TQFP-32",
-            p5: "5. Digital I/Os & Interfaces", p5P: "e.g., 37 GPIO, SPI, I2C, CAN, USB",
-            p6: "6. Data Converters (ADC/DAC)", p6P: "e.g., 10x 12-bit ADC, 2x DAC",
-            p7: "7. Operating Temp Range", p7P: "e.g., -40°C to +85°C Industrial",
-            p8: "8. Hardware Features", p8P: "e.g., DMA, PWM Timers, Internal RC"
+            p3: "3. Supply Voltage (Vcc)", p3P: "e.g., 2.0V to 3.6V", thP3: "Supply Vcc",
+            p4: "4. Package / Pin Count", p4P: "e.g., LQFP-48, QFN-32",
+            p5: "5. Digital I/Os & Interfaces", p5P: "e.g., 37 GPIO, SPI, I2C, CAN",
+            p6: "6. Data Converters (ADC/DAC)", p6P: "e.g., 10x 12-bit ADC",
+            p7: "7. Operating Temp Range", p7P: "e.g., -40°C to +85°C",
+            p8: "8. Hardware Features", p8P: "e.g., DMA, PWM Timers"
         },
         MEMORY: {
-            subLabel: "Memory Technology", subPlace: "e.g., Serial NOR Flash, I2C EEPROM, SRAM",
-            p1: "1. Density / Capacity", p1P: "e.g., 128Mbit (16MB), 256Kbit (32KB)", thP1: "Capacity",
-            p2: "2. Bus Interface & Clock", p2P: "e.g., Quad-SPI @ 133MHz, I2C 1MHz", thP2: "Interface & Speed",
-            p3: "3. Operating Voltage (Vcc)", p3P: "e.g., 2.7V to 3.6V, 1.8V", thP3: "Supply Vcc",
+            subLabel: "Memory Technology", subPlace: "e.g., Serial NOR Flash, I2C EEPROM",
+            p1: "1. Density / Capacity", p1P: "e.g., 128Mbit (16MB), 256Kbit", thP1: "Capacity",
+            p2: "2. Bus Interface & Clock", p2P: "e.g., Quad-SPI @ 133MHz", thP2: "Interface & Speed",
+            p3: "3. Operating Voltage (Vcc)", p3P: "e.g., 2.7V to 3.6V", thP3: "Supply Vcc",
             p4: "4. Package / Footprint", p4P: "e.g., SOIC-8 (208mil), WSON-8",
-            p5: "5. Access Time / Write Speed", p5P: "e.g., 6ns, 5ms Page Write",
+            p5: "5. Access Time / Write Speed", p5P: "e.g., 6ns, 5ms Write",
             p6: "6. Organization", p6P: "e.g., 16M x 8, 32K x 8",
             p7: "7. Operating Temp Range", p7P: "e.g., -40°C to +85°C",
-            p8: "8. Endurance & Retention", p8P: "e.g., 100K Program Cycles, 20-Yr"
+            p8: "8. Endurance & Retention", p8P: "e.g., 100K Cycles, 20-Yr"
         },
         POWER: {
             subLabel: "Regulator / Converter Topology", subPlace: "e.g., Step-Down Buck Converter, Linear LDO",
-            p1: "1. Output Voltage (Vout)", p1P: "e.g., 3.3V Fixed, 1.2V~37V Adj", thP1: "Output Vout",
-            p2: "2. Output Current (Iout)", p2P: "e.g., 3A Continuous, 1A, 500mA", thP2: "Max Current Iout",
-            p3: "3. Input Voltage Range (Vin)", p3P: "e.g., 4.5V to 36V, 15V Max", thP3: "Input Vin",
-            p4: "4. Package / Thermal Pad", p4P: "e.g., SOIC-8-EP, SOT-223, TO-252",
-            p5: "5. Switching Freq / Dropout", p5P: "e.g., 500kHz, 1.1V Dropout @ 1A",
-            p6: "6. Synchronous / Topology", p6P: "e.g., Synchronous Buck, Pos LDO",
+            p1: "1. Output Voltage (Vout)", p1P: "e.g., 3.3V Fixed, Adj", thP1: "Output Vout",
+            p2: "2. Output Current (Iout)", p2P: "e.g., 3A, 1A, 500mA", thP2: "Max Current Iout",
+            p3: "3. Input Voltage Range (Vin)", p3P: "e.g., 4.5V to 36V", thP3: "Input Vin",
+            p4: "4. Package / Thermal Pad", p4P: "e.g., SOIC-8-EP, SOT-223",
+            p5: "5. Switching Freq / Dropout", p5P: "e.g., 500kHz, 1.1V Dropout",
+            p6: "6. Topology", p6P: "e.g., Synchronous Buck, Pos LDO",
             p7: "7. Operating Junction Temp", p7P: "e.g., -40°C to +125°C",
-            p8: "8. Protection Features", p8P: "e.g., Overcurrent, Thermal Shutdown"
+            p8: "8. Protection", p8P: "e.g., Overcurrent, Thermal"
         },
         SEMI: {
-            subLabel: "Discrete Semiconductor Type", subPlace: "e.g., N-Channel MOSFET, Schottky Barrier Diode",
-            p1: "1. Continuous Current (Id / If)", p1P: "e.g., 220mA, 3A, 30A", thP1: "Current Id/If",
-            p2: "2. Rds(on) / Forward Drop (Vf)", p2P: "e.g., 3.5Ω @ 5V Vgs, 0.45V Vf", thP2: "Rds(on) / Vf",
+            subLabel: "Discrete Semiconductor Type", subPlace: "e.g., N-Channel MOSFET, Schottky Diode",
+            p1: "1. Continuous Current (Id / If)", p1P: "e.g., 220mA, 3A", thP1: "Current Id/If",
+            p2: "2. Rds(on) / Forward Drop (Vf)", p2P: "e.g., 3.5Ω @ 5V, 0.45V Vf", thP2: "Rds(on) / Vf",
             p3: "3. Breakdown Voltage (Vds / Vr)", p3P: "e.g., 50V Vds, 40V Vr", thP3: "Breakdown Volt",
-            p4: "4. Package / Case Style", p4P: "e.g., SOT-23, SMA (DO-214AC), SOD-123",
-            p5: "5. Power Dissipation / P_tot", p5P: "e.g., 350mW, 1.25W",
-            p6: "6. Channel Configuration", p6P: "e.g., Single N-Channel, Common Cathode",
+            p4: "4. Package / Case Style", p4P: "e.g., SOT-23, SMA",
+            p5: "5. Power Dissipation", p5P: "e.g., 350mW, 1.25W",
+            p6: "6. Channel Configuration", p6P: "e.g., Single N-Channel",
             p7: "7. Operating Junction Temp", p7P: "e.g., -55°C to +150°C",
-            p8: "8. Gate Threshold / Recovery", p8P: "e.g., Vgs(th) 1.5V Logic Level, Fast Trr"
+            p8: "8. Gate Threshold", p8P: "e.g., Vgs(th) 1.5V Logic Level"
         }
     },
 
-    // 2. Initialize Manual Workspace DOM
     init() {
         const mountPoint = document.getElementById('manualWorkspaceArea');
         if (!mountPoint) return;
@@ -1054,8 +1132,7 @@ const ManualEntryUI = {
                     <span class="badge bg-primary">Manual Verification Mode</span>
                 </div>
                 <div class="crisp-panel-body">
-                    <!-- Category Selector Pills -->
-                    <div class="small fw-bold text-secondary mb-1">Select Component Category (Reconfigures Form Parameters Automatically):</div>
+                    <div class="small fw-bold text-secondary mb-1">Select Component Category (Adapts Parameters Automatically):</div>
                     <div class="d-flex flex-wrap gap-2 mb-3 p-2 rounded bg-light border" id="categoryTabs">
                         <button type="button" class="btn btn-sm btn-outline-primary active fw-semibold" data-cat="PASSIVE" onclick="ManualEntryUI.switchCategory('PASSIVE')">
                             <i class="bi bi-bezier2 me-1"></i> Passives (R / L / C)
@@ -1077,9 +1154,8 @@ const ManualEntryUI = {
                     <form id="singleComponentForm">
                         <input type="hidden" id="currentCategoryKey" value="PASSIVE">
                         <div class="row g-2">
-                            <!-- Core Identity -->
                             <div class="col-md-4">
-                                <label class="form-label-custom text-primary fw-bold">MFG_PN (Manufacturer Part Number) *</label>
+                                <label class="form-label-custom text-primary fw-bold">MFG_PN (Part Number) *</label>
                                 <input type="text" id="inputMpn" class="form-control-custom" placeholder="e.g., STM32F103C8T6 or GRM188R71H104KA93D" required>
                             </div>
                             <div class="col-md-4">
@@ -1091,7 +1167,6 @@ const ManualEntryUI = {
                                 <input type="text" id="inputSubType" class="form-control-custom" placeholder="e.g., MLCC Ceramic Capacitor">
                             </div>
 
-                            <!-- Morphing Slots 1 to 4 -->
                             <div class="col-md-3">
                                 <label class="form-label-custom text-dark" id="lblParam1">1. Value</label>
                                 <input type="text" id="inputParam1" class="form-control-custom" placeholder="e.g., 100nF, 4.7kΩ">
@@ -1109,7 +1184,6 @@ const ManualEntryUI = {
                                 <input type="text" id="inputPackage" class="form-control-custom" placeholder="e.g., 0603, LQFP-48">
                             </div>
 
-                            <!-- Morphing Slots 5 to 8 -->
                             <div class="col-md-3">
                                 <label class="form-label-custom" id="lblParam5">5. Power / Current</label>
                                 <input type="text" id="inputParam5" class="form-control-custom" placeholder="e.g., 0.1W, 2A">
@@ -1145,7 +1219,6 @@ const ManualEntryUI = {
         this.switchCategory('PASSIVE');
     },
 
-    // 2. Category Switcher Logic
     switchCategory(catKey) {
         document.getElementById('currentCategoryKey').value = catKey;
         const schema = this.schemas[catKey] || this.schemas.PASSIVE;
@@ -1173,13 +1246,11 @@ const ManualEntryUI = {
         document.getElementById('lblParam8').innerText = schema.p8;
         document.getElementById('inputParam8').placeholder = schema.p8P;
 
-        // Synchronize Results Table Column Headers
         document.getElementById('thSpec1').innerHTML = `${schema.thP1}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
         document.getElementById('thSpec2').innerHTML = `${schema.thP2}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
         document.getElementById('thSpec3').innerHTML = `${schema.thP3}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
     },
 
-    // 3. Form Submission & Agent Invocation
     bindEvents() {
         const form = document.getElementById('singleComponentForm');
         form.addEventListener('submit', async (e) => {
@@ -1203,11 +1274,9 @@ const ManualEntryUI = {
                 p8: document.getElementById('inputParam8').value.trim()
             };
 
-            // Call Component Intelligence Agent (from Section 2)
             const fetched = await ComponentAgent.inspectComponent(inputParams);
             const evaluation = ComponentAgent.evaluateDiscrepancies(inputParams, fetched);
 
-            // Record into State
             ComponentAgent.state.auditRecords = [{
                 index: 1,
                 input: inputParams,
@@ -1228,7 +1297,6 @@ const ManualEntryUI = {
         });
     },
 
-    // 4. Render Table with Strict Cross-Manufacturer Alternates & Vendor Chips
     renderTable() {
         const tbody = document.getElementById('auditTableBody');
         if (!tbody) return;
@@ -1239,21 +1307,18 @@ const ManualEntryUI = {
             const evalRes = record.evaluation;
             const enc = encodeURIComponent(f.mpn);
 
-            // Working Action Links
             const dkUrl = f.productUrl || `https://www.digikey.in/en/products/result?keywords=${enc}`;
             const msUrl = `https://www.mouser.in/c/?q=${enc}`;
             const lcscUrl = `https://www.lcsc.com/search?q=${enc}`;
             const jlcUrl = `https://jlcpcb.com/parts/componentSearch?searchTxt=${enc}`;
             const rsUrl = `https://in.rsdelivers.com/productlist/search?query=${enc}`;
 
-            // Status Badge
             const statusBadge = record.status === "Verified Clean"
                 ? `<span class="badge bg-success">✔ Verified Clean</span>`
                 : (record.status === "Mismatch Found"
                     ? `<span class="badge bg-danger">⚠ Mismatch (${evalRes.mismatches.length})</span>`
                     : `<span class="badge bg-secondary">✖ Not Found</span>`);
 
-            // Build Strict Second-Source Alternates (Strictly Excluding Entered Mfr)
             let altsHtml = `<span class="text-muted small">No second-source alternates available</span>`;
             if (record.alternates && record.alternates.length > 0) {
                 altsHtml = record.alternates.map(alt => {
@@ -1333,12 +1398,10 @@ const ManualEntryUI = {
     }
 };
 
-// Auto-Initialize Manual Component UI on DOM Load
 window.addEventListener('DOMContentLoaded', () => {
     ManualEntryUI.init();
 });
 
-// Re-render Table on Currency Changes
 window.addEventListener('renderAuditTable', () => {
     ManualEntryUI.renderTable();
 });
@@ -1356,11 +1419,9 @@ const BulkBomEngine = {
         rawSheetRows: [],
         headerRowIdx: 0,
         originalHeaders: [],
-        rawRowObjects: [],
         activeJobId: 0
     },
 
-    // 1. Initialize Bulk BOM Workspace DOM
     init() {
         const mountPoint = document.getElementById('bomWorkspaceArea');
         if (!mountPoint) return;
@@ -1372,7 +1433,6 @@ const BulkBomEngine = {
                     <span class="badge bg-success">Any Row Count (10 to 1,000+ Parts)</span>
                 </div>
                 <div class="crisp-panel-body">
-                    <!-- Dropzone -->
                     <div class="p-4 border-2 border-dashed rounded text-center bg-light" 
                          style="border: 2px dashed var(--brand-primary) !important; cursor: pointer;"
                          onclick="document.getElementById('excelFileInput').click();">
@@ -1397,7 +1457,6 @@ const BulkBomEngine = {
                 </div>
             </div>
 
-            <!-- Interactive DigiKey MyLists-Style Column Mapper -->
             <div id="bomMapperContainer" class="crisp-panel border-primary d-none my-3">
                 <div class="crisp-panel-header bg-primary text-white">
                     <span><i class="bi bi-diagram-3-fill me-2"></i>Step 2: Confirm BOM Column Mapping (Auto-Matched)</span>
@@ -1456,10 +1515,8 @@ const BulkBomEngine = {
                         </div>
                     </div>
 
-                    <!-- Live Mapping Preview Strip -->
                     <div id="bomLivePreviewBox" class="p-2 mt-3 rounded bg-dark text-white font-monospace" style="font-size: 0.76rem;"></div>
 
-                    <!-- Paced Progress Indicator -->
                     <div id="bomProgressRow" class="mt-3 d-none">
                         <div class="d-flex justify-content-between small mb-1 fw-bold">
                             <span id="bomProgressStatus" class="text-primary">Querying Official Distributor APIs...</span>
@@ -1477,12 +1534,10 @@ const BulkBomEngine = {
         this.bindEvents();
     },
 
-    // 2. Inject Executive Summary Box right above the results table
     injectExecutiveSummarySlot() {
         const resultsWrapper = document.getElementById('resultsCardWrapper');
         if (!resultsWrapper) return;
 
-        // Create or replace summary container
         let summaryContainer = document.getElementById('bomExecutiveSummaryArea');
         if (!summaryContainer) {
             summaryContainer = document.createElement('div');
@@ -1492,7 +1547,6 @@ const BulkBomEngine = {
         }
     },
 
-    // 3. Bind File Input Events
     bindEvents() {
         const fileInput = document.getElementById('excelFileInput');
         fileInput.addEventListener('change', (e) => {
@@ -1518,7 +1572,6 @@ const BulkBomEngine = {
         });
     },
 
-    // 4. Tab Ingestion & Automatic Header Row Detection
     onSheetSelected() {
         if (!this.state.rawWorkbook) return;
         const sheetIdx = parseInt(document.getElementById('sheetPickerSelect').value, 10) || 0;
@@ -1532,7 +1585,6 @@ const BulkBomEngine = {
             return;
         }
 
-        // Auto-locate Header Row (scans top 35 rows for MFG_PN / MPN / Part Number / MFG_NAME)
         let bestRow = 0;
         let highestScore = -1;
 
@@ -1560,7 +1612,6 @@ const BulkBomEngine = {
         this.rebuildMapperSelectors();
     },
 
-    // 5. Populate Mapping Dropdowns & Strict Field Identification
     rebuildMapperSelectors() {
         const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
         this.state.headerRowIdx = headerIdx;
@@ -1568,7 +1619,6 @@ const BulkBomEngine = {
         this.state.originalHeaders = headerRow;
         const firstDataRow = this.state.rawSheetRows[headerIdx + 1] || [];
 
-        // Count non-empty parts
         let validRows = 0;
         for (let r = headerIdx + 1; r < this.state.rawSheetRows.length; r++) {
             if (this.state.rawSheetRows[r] && this.state.rawSheetRows[r].some(c => String(c).trim() !== "")) validRows++;
@@ -1587,7 +1637,6 @@ const BulkBomEngine = {
             });
         });
 
-        // Smart Mapping Rules (Normalized)
         const normHeaders = headerRow.map(h => String(h || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
 
         const matchCol = (elId, exactNames, fallbackRegex, exclusionRegex = null) => {
@@ -1616,7 +1665,6 @@ const BulkBomEngine = {
         this.updatePreviewStrip();
     },
 
-    // 6. Update Live Mapping Confirmation Strip
     updatePreviewStrip() {
         const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
         const mpnIdx = parseInt(document.getElementById('selMapMpn').value, 10);
@@ -1649,7 +1697,6 @@ const BulkBomEngine = {
             ).join('');
     },
 
-    // 7. Execute Batch Audit via Component Intelligence Agent
     async executeAudit() {
         const jobId = ++this.state.activeJobId;
         const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
@@ -1672,22 +1719,32 @@ const BulkBomEngine = {
 
             const mpn = mpnIdx >= 0 ? String(row[mpnIdx] || '').trim() : "";
             const mfr = mfrIdx >= 0 ? String(row[mfrIdx] || '').trim() : "";
-            const val = valIdx >= 0 ? String(row[valIdx] || '').trim() : "";
+            let val = valIdx >= 0 ? String(row[valIdx] || '').trim() : "";
+            let tol = tolIdx >= 0 ? String(row[tolIdx] || '').trim() : "";
+            let volt = voltIdx >= 0 ? String(row[voltIdx] || '').trim() : "";
+            let pkg = pkgIdx >= 0 ? String(row[pkgIdx] || '').trim() : "";
             const desc = descIdx >= 0 ? String(row[descIdx] || '').trim() : "";
 
             if (!mpn && !val && !desc) continue;
             if (/^(dnp|do not populate|none|n\/a|-)$/i.test(mpn) && !val) continue;
 
+            // Extract inline specs from Description if columns are empty
+            const combinedText = `${val} ${desc}`;
+            if (!val || val === "—") val = ComponentAgent.paramExtractor.extractValue(combinedText);
+            if (!tol || tol === "—") tol = ComponentAgent.paramExtractor.extractTolerance(combinedText);
+            if (!volt || volt === "—") volt = ComponentAgent.paramExtractor.extractVoltage(combinedText);
+            if (!pkg || pkg === "—") pkg = ComponentAgent.paramExtractor.extractPackage(combinedText, mpn);
+
             queue.push({
                 rowNum: r + 1,
-                originalRowData: row, // Keeps original row intact for export!
+                originalRowData: row,
                 mpn,
                 mfr,
                 type: typeIdx >= 0 ? String(row[typeIdx] || '').trim() : "",
                 p1: val,
-                p2: tolIdx >= 0 ? String(row[tolIdx] || '').trim() : "",
-                p3: voltIdx >= 0 ? String(row[voltIdx] || '').trim() : "",
-                package: pkgIdx >= 0 ? String(row[pkgIdx] || '').trim() : "",
+                p2: tol,
+                p3: volt,
+                package: pkg,
                 p5: currIdx >= 0 ? String(row[currIdx] || '').trim() : "",
                 desc
             });
@@ -1698,7 +1755,6 @@ const BulkBomEngine = {
             return;
         }
 
-        // Reset State
         ComponentAgent.state.auditRecords = [];
         const progressRow = document.getElementById('bomProgressRow');
         const meter = document.getElementById('bomProgressMeter');
@@ -1708,7 +1764,6 @@ const BulkBomEngine = {
         const tableWrapper = document.getElementById('resultsCardWrapper');
         tableWrapper.classList.remove('d-none');
 
-        // Sequentially execute through Component Intelligence Agent
         for (let i = 0; i < queue.length; i++) {
             if (jobId !== this.state.activeJobId) return;
 
@@ -1721,7 +1776,7 @@ const BulkBomEngine = {
 
             ComponentAgent.state.auditRecords.push({
                 index: i + 1,
-                originalRowData: item.originalRowData, // Retained for appending in export
+                originalRowData: item.originalRowData,
                 input: item,
                 fetched: fetched,
                 evaluation: evaluation,
@@ -1730,7 +1785,6 @@ const BulkBomEngine = {
                 alternates: fetched.alternates || []
             });
 
-            // Stream results to table periodically
             if (i % 2 === 0 || i === queue.length - 1) {
                 ComponentAgent.recalculateKPIs();
                 ManualEntryUI.renderTable();
@@ -1744,7 +1798,6 @@ const BulkBomEngine = {
         }
     },
 
-    // 8. Render Critical BOM Executive Summary Card & Table
     renderExecutiveSummary(records) {
         const summaryArea = document.getElementById('bomExecutiveSummaryArea');
         if (!summaryArea) return;
@@ -1755,12 +1808,10 @@ const BulkBomEngine = {
         const notFound = records.filter(r => r.status === "Part Not Found").length;
         const healthScore = total > 0 ? Math.round((clean / total) * 100) : 0;
 
-        // Categorize Risk Levels
         const highRiskItems = records.filter(r => r.status === "Part Not Found");
         const medRiskItems = records.filter(r => r.status === "Mismatch Found");
 
-        let healthColor = healthScore >= 80 ? 'text-success' : (healthScore >= 50 ? 'text-warning' : 'text-danger');
-        let healthBg = healthScore >= 80 ? 'bg-success' : (healthScore >= 50 ? 'bg-warning' : 'bg-danger');
+        let healthBg = healthScore >= 80 ? 'bg-success' : (healthScore >= 50 ? 'bg-warning text-dark' : 'bg-danger text-white');
 
         summaryArea.innerHTML = `
             <div class="crisp-panel border-dark shadow-sm">
@@ -1769,7 +1820,6 @@ const BulkBomEngine = {
                     <span class="badge ${healthBg}">BOM Health Score: ${healthScore}%</span>
                 </div>
                 <div class="crisp-panel-body">
-                    <!-- Key Metric Badges -->
                     <div class="row g-2 mb-3">
                         <div class="col-md-3">
                             <div class="p-2 border rounded bg-light text-center">
@@ -1797,7 +1847,6 @@ const BulkBomEngine = {
                         </div>
                     </div>
 
-                    <!-- Critical Risk Summary Table -->
                     <div class="table-responsive">
                         <table class="table table-bordered table-sm mb-0 align-middle" style="font-size:0.79rem;">
                             <thead class="table-light">
@@ -1805,59 +1854,48 @@ const BulkBomEngine = {
                                     <th style="width: 140px;">Criticality Level</th>
                                     <th style="width: 90px;" class="text-center">Count</th>
                                     <th>Observed Critical Observations & Sourcing Impact</th>
-                                    <th style="width: 220px;">Recommended Engineering Action</th>
+                                    <th style="width: 220px;">Recommended Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td>
-                                        <span class="badge bg-danger text-white"><i class="bi bi-x-octagon-fill me-1"></i>High Risk</span>
-                                    </td>
+                                    <td><span class="badge bg-danger text-white"><i class="bi bi-x-octagon-fill me-1"></i>High Risk</span></td>
                                     <td class="text-center fw-bold font-monospace">${highRiskItems.length}</td>
                                     <td>
                                         ${highRiskItems.length > 0 
-                                            ? `Components like <code>${highRiskItems.slice(0, 3).map(x => x.fetched.mpn).join(', ')}</code> could not be found in active distributor catalogs or EIA databases. Risk of obsolete parts or invalid part numbers.`
+                                            ? `Components like <code>${highRiskItems.slice(0, 3).map(x => x.fetched.mpn).join(', ')}</code> could not be found in active distributor catalogs. Potential obsolete part numbers.`
                                             : `<span class="text-success fw-semibold">No critical unverified part numbers detected. All MPNs match active distributor catalogs.</span>`}
                                     </td>
                                     <td>
                                         ${highRiskItems.length > 0 
-                                            ? `<span class="text-danger fw-bold">Manual engineering review required before fab release. Verify manufacturer spelling or part suffix.</span>`
+                                            ? `<span class="text-danger fw-bold">Manual review required before ordering. Check MPN suffix or manufacturer spelling.</span>`
                                             : `<span class="text-success">Ready for fabrication sourcing.</span>`}
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>
-                                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Medium Risk</span>
-                                    </td>
+                                    <td><span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Medium Risk</span></td>
                                     <td class="text-center fw-bold font-monospace">${medRiskItems.length}</td>
                                     <td>
                                         ${medRiskItems.length > 0 
-                                            ? `Parameter discrepancies found between engineering BOM and official distributor specs (e.g. package size differences like 0402 vs 0603, or voltage derating ratings).`
+                                            ? `Parameter discrepancies found between engineering BOM and official distributor specs (e.g. package size differences or voltage ratings).`
                                             : `<span class="text-success fw-semibold">Zero parameter discrepancies. Component footprints and electrical ratings match 1:1.</span>`}
                                     </td>
                                     <td>
                                         ${medRiskItems.length > 0 
-                                            ? `<span class="text-warning-emphasis fw-bold">Review highlighted red cells in audit table below to verify PCB footprint matches schematic.</span>`
+                                            ? `<span class="text-warning-emphasis fw-bold">Review highlighted red cells in audit table below to verify schematic matches PCB.</span>`
                                             : `<span class="text-success">No footprint correction needed.</span>`}
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>
-                                        <span class="badge bg-success text-white"><i class="bi bi-check-circle-fill me-1"></i>Second Source</span>
-                                    </td>
+                                    <td><span class="badge bg-success text-white"><i class="bi bi-check-circle-fill me-1"></i>Second Source</span></td>
                                     <td class="text-center fw-bold font-monospace">${records.filter(r => r.alternates && r.alternates.length > 0).length}</td>
-                                    <td>
-                                        Second-source cross-manufacturer replacement parts strictly verified and suggested from competing manufacturers (excluding the entered manufacturer to avoid vendor lock-in).
-                                    </td>
-                                    <td>
-                                        <span class="text-success fw-bold">Approved for multi-vendor supply chain redundancy.</span>
-                                    </td>
+                                    <td>Second-source cross-manufacturer replacement parts strictly verified and suggested from competing manufacturers.</td>
+                                    <td><span class="text-success fw-bold">Approved for multi-vendor supply chain redundancy.</span></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <!-- Quick Action Bar -->
                     <div class="mt-3 d-flex justify-content-between align-items-center">
                         <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Full row-by-row parameter comparison with working links is detailed in the table below.</small>
                         <button class="btn btn-sm btn-success fw-bold px-3 shadow-sm" onclick="BulkBomEngine.exportVerifiedBOM()">
@@ -1871,7 +1909,6 @@ const BulkBomEngine = {
         summaryArea.classList.remove('d-none');
     },
 
-    // 9. Verified Multi-Vendor BOM Excel Exporter (Original BOM + Added Alternate Columns)
     exportVerifiedBOM() {
         const records = ComponentAgent.state.auditRecords;
         if (!records || records.length === 0) {
@@ -1882,12 +1919,11 @@ const BulkBomEngine = {
         const curr = ComponentAgent.state.currency;
         const originalHeaders = this.state.originalHeaders;
 
-        // Construct rows: 100% of Original BOM Columns PRESERVED + New Audit & Alternate Columns Added
         const exportRows = records.map(r => {
             const rowObj = {};
             const origRowData = r.originalRowData || [];
 
-            // 1. Copy over every single original BOM cell exactly as uploaded
+            // 1. Copy over 100% of the original uploaded BOM columns exactly as they were
             originalHeaders.forEach((colName, colIdx) => {
                 const headerKey = String(colName || `Column_${colIdx + 1}`).trim();
                 rowObj[headerKey] = origRowData[colIdx] !== undefined ? origRowData[colIdx] : "";
@@ -1933,7 +1969,6 @@ const BulkBomEngine = {
         XLSX.writeFile(wb, `Original_BOM_With_Verified_Alternates_${curr}_${new Date().toISOString().slice(0, 10)}.xlsx`);
     },
 
-    // 10. Download Sample BOM Template
     downloadDemoTemplate() {
         const sampleRows = [
             { "MFG_PN": "STM32F103C8T6", "MFG_NAME": "STMicroelectronics", "Category": "MCU", "Value": "72MHz", "Package": "LQFP-48", "Voltage": "3.3V", "Description": "32-Bit ARM Cortex-M3 MCU" },
@@ -1949,7 +1984,6 @@ const BulkBomEngine = {
     }
 };
 
-// Global Event Listeners for Export & Table Filter
 window.addEventListener('exportBOM', () => {
     BulkBomEngine.exportVerifiedBOM();
 });
@@ -1962,7 +1996,6 @@ window.addEventListener('filterTable', (e) => {
     });
 });
 
-// Auto-Initialize on Load
 window.addEventListener('DOMContentLoaded', () => {
     BulkBomEngine.init();
 });
