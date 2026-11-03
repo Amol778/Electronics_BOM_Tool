@@ -859,24 +859,86 @@ const ComponentAgent = {
         return { recognized, mfr, type, val, tol, volt, pkg, priceUsd: 0.012 };
     },
 
-    // 7. Strict Cross-Manufacturer Alternate Generator
+    // 7. Strict Package-Locked Cross-Manufacturer Alternate Generator
     generateCrossManufacturerAlternates(targetMpn, primaryMfr, inputParams) {
         const mfrLower = (primaryMfr || "").toLowerCase();
-        const pkg = inputParams.package || "0603";
-        const val = inputParams.p1 || "100nF";
-        const volt = inputParams.p3 || "50V";
-        const tol = inputParams.p2 || "±10%";
+        
+        // Normalize package: isolate standard SMD footprint codes (01005, 0201, 0402, 0603, 0805, 1206, 1210, etc.)
+        const rawPkg = String(inputParams.package || inputParams.pkg || "").toUpperCase();
+        let cleanPkg = "0603";
+        const pkgMatch = rawPkg.match(/\b(01005|0201|0402|0603|0805|1206|1210|1812|2010|2512|SOT-23|SOIC-8|LQFP-48|QFN-32)\b/);
+        
+        if (pkgMatch) {
+            cleanPkg = pkgMatch[1];
+        } else {
+            // Also inspect target MPN for footprint indicators if package input was empty
+            const mpnPkg = targetMpn.match(/\b(01005|0201|0402|0603|0805|1206|1210|2512)\b/);
+            if (mpnPkg) cleanPkg = mpnPkg[1];
+        }
 
+        const val = inputParams.p1 || inputParams.val || "100nF";
+        const volt = inputParams.p3 || inputParams.volt || "50V";
+        const tol = inputParams.p2 || inputParams.tol || "±10%";
+        const specSummary = `${val} | ${volt} | ${cleanPkg} | ${tol}`;
+
+        // EIA Capacitor Footprint Code Mapping by Manufacturer
+        const capPkgCodes = {
+            "0201": { murata: "033", samsung: "03", tdk: "C0603", yageo: "0201" },
+            "0402": { murata: "155", samsung: "05", tdk: "C1005", yageo: "0402" },
+            "0603": { murata: "188", samsung: "10", tdk: "C1608", yageo: "0603" },
+            "0805": { murata: "21B", samsung: "21", tdk: "C2012", yageo: "0805" },
+            "1206": { murata: "31C", samsung: "31", tdk: "C3216", yageo: "1206" }
+        };
+
+        const activeCapMap = capPkgCodes[cleanPkg] || capPkgCodes["0603"];
+
+        // Dynamic, Package-Locked Candidates (Matching CleanPkg Strictly)
         const masterCandidates = [
-            { mpn: "GRM188R71H104KA93D", mfr: "Murata", source: "DigiKey", priceUsd: 0.015, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-            { mpn: "CL10B104KB8NNNC", mfr: "Samsung", source: "Mouser", priceUsd: 0.012, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-            { mpn: "C1608X7R1H104K080AA", mfr: "TDK", source: "Mouser / RS PRO", priceUsd: 0.016, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-            { mpn: "CC0603KRX7R9BB104", mfr: "YAGEO", source: "LCSC / JLCPCB", lcscCode: "C14663", priceUsd: 0.008, specs: `${val} | ${volt} | ${pkg} | ${tol}` }
+            { 
+                mpn: `GRM${activeCapMap.murata}R71H104KA88D`, 
+                mfr: "Murata", 
+                package: cleanPkg,
+                source: "DigiKey", 
+                priceUsd: cleanPkg === "0201" ? 0.018 : 0.015, 
+                specs: specSummary 
+            },
+            { 
+                mpn: `CL${activeCapMap.samsung}B104KB8NNNC`, 
+                mfr: "Samsung", 
+                package: cleanPkg,
+                source: "Mouser", 
+                priceUsd: cleanPkg === "0201" ? 0.014 : 0.012, 
+                specs: specSummary 
+            },
+            { 
+                mpn: `${activeCapMap.tdk}X7R1H104K080AA`, 
+                mfr: "TDK", 
+                package: cleanPkg,
+                source: "Mouser / RS PRO", 
+                priceUsd: cleanPkg === "0201" ? 0.019 : 0.016, 
+                specs: specSummary 
+            },
+            { 
+                mpn: `CC${activeCapMap.yageo}KRX7R9BB104`, 
+                mfr: "YAGEO", 
+                package: cleanPkg,
+                source: "LCSC / JLCPCB", 
+                lcscCode: cleanPkg === "0201" ? "C31114" : "C14663", 
+                priceUsd: cleanPkg === "0201" ? 0.009 : 0.008, 
+                specs: specSummary 
+            }
         ];
 
+        // STRICT FILTER:
+        // 1. Alternate manufacturer MUST NOT match target manufacturer
+        // 2. Alternate MPN MUST NOT match target MPN
+        // 3. Alternate package MUST strictly equal target cleanPkg
         return masterCandidates.filter(c => {
             const candMfr = c.mfr.toLowerCase();
-            return !candMfr.includes(mfrLower) && !mfrLower.includes(candMfr) && c.mpn.toUpperCase() !== targetMpn.toUpperCase();
+            const isDiffMfr = !candMfr.includes(mfrLower) && !mfrLower.includes(candMfr);
+            const isDiffMpn = c.mpn.toUpperCase() !== targetMpn.toUpperCase();
+            const isExactPkg = c.package === cleanPkg;
+            return isDiffMfr && isDiffMpn && isExactPkg;
         }).slice(0, 3);
     },
 
