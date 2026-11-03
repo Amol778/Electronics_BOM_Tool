@@ -1,952 +1,624 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hardware Design Guide — Component Verification & Cross-Sourcing Suite</title>
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
-    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-canvas: #f1f5f9;
-            --bg-surface: #ffffff;
-            --bg-obsidian: #090d16;
-            --bg-navy: #0f172a;
-            --brand-primary: #2563eb;
-            --brand-primary-hover: #1d4ed8;
-            --brand-indigo: #4f46e5;
-            --status-verified: #059669;
-            --status-verified-bg: #ecfdf5;
-            --status-mismatch: #dc2626;
-            --status-mismatch-bg: #fef2f2;
-            --text-main: #0f172a;
-            --text-secondary: #334155;
-            --text-muted: #64748b;
-            --border-crisp: #cbd5e1;
-            --border-light: #e2e8f0;
-            --font-sans: 'Plus Jakarta Sans', sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-            --shadow-sm: 0 2px 6px -1px rgba(15, 23, 42, 0.07);
-        }
+<!-- ========================================================================= -->
+<!-- SECTION 4: BULK EXCEL BOM PARSER, EXECUTIVE SUMMARY & ENHANCED EXPORTER   -->
+<!-- ========================================================================= -->
+<script>
+/**
+ * Section 4: Bulk Excel BOM Engine, Executive Summary Table & Enhanced Exporter
+ */
+const BulkBomEngine = {
+    state: {
+        rawWorkbook: null,
+        rawSheetRows: [],
+        headerRowIdx: 0,
+        originalHeaders: [],
+        rawRowObjects: [],
+        activeJobId: 0
+    },
 
-        body {
-            background-color: var(--bg-canvas);
-            color: var(--text-main);
-            font-family: var(--font-sans);
-            font-size: 0.875rem;
-            line-height: 1.5;
-        }
+    // 1. Initialize Bulk BOM Workspace DOM
+    init() {
+        const mountPoint = document.getElementById('bomWorkspaceArea');
+        if (!mountPoint) return;
 
-        .enterprise-navbar {
-            background: linear-gradient(135deg, var(--bg-obsidian) 0%, var(--bg-navy) 100%);
-            color: #ffffff;
-            border-bottom: 3px solid var(--brand-primary);
-            padding: 0.75rem 1.5rem;
-            position: sticky;
-            top: 0;
-            z-index: 1030;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-        }
-
-        .brand-title {
-            font-weight: 800;
-            font-size: 1.15rem;
-            letter-spacing: -0.02em;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            gap: 0.6rem;
-        }
-
-        .currency-pill {
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 8px;
-            padding: 4px 10px;
-            color: #f8fafc;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.78rem;
-        }
-
-        .currency-pill select, .currency-pill input {
-            background: #1e293b;
-            color: #38bdf8;
-            border: 1px solid #475569;
-            border-radius: 5px;
-            padding: 2px 6px;
-            font-family: var(--font-mono);
-            font-size: 0.76rem;
-            font-weight: 600;
-        }
-
-        .crisp-card {
-            background: var(--bg-surface);
-            border: 1px solid var(--border-crisp);
-            border-radius: 12px;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 18px;
-            overflow: hidden;
-        }
-
-        .crisp-card-header {
-            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
-            border-bottom: 1px solid var(--border-crisp);
-            padding: 11px 18px;
-            font-weight: 700;
-            font-size: 0.88rem;
-            color: var(--bg-navy);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .crisp-card-body {
-            padding: 16px 18px;
-        }
-
-        .cat-pill-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            margin-bottom: 14px;
-            padding: 6px;
-            background: #f1f5f9;
-            border-radius: 10px;
-            border: 1px solid var(--border-light);
-        }
-
-        .cat-pill-btn {
-            border: 1px solid transparent;
-            background: transparent;
-            color: var(--text-secondary);
-            font-weight: 600;
-            font-size: 0.76rem;
-            padding: 6px 12px;
-            border-radius: 7px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .cat-pill-btn:hover {
-            background: #e2e8f0;
-            color: var(--bg-navy);
-        }
-
-        .cat-pill-btn.active {
-            background: var(--brand-primary);
-            color: #ffffff;
-            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
-        }
-
-        .form-label-crisp {
-            font-size: 0.74rem;
-            font-weight: 700;
-            color: var(--text-secondary);
-            margin-bottom: 3px;
-        }
-
-        .form-control-crisp, .form-select-crisp {
-            border: 1px solid var(--border-crisp);
-            border-radius: 7px;
-            font-size: 0.81rem;
-            padding: 6px 10px;
-            color: var(--text-main);
-            background-color: #ffffff;
-            width: 100%;
-        }
-
-        .form-control-crisp:focus, .form-select-crisp:focus {
-            border-color: var(--brand-primary);
-            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-            outline: none;
-        }
-
-        code, .mpn-code {
-            font-family: var(--font-mono);
-            background: #f1f5f9;
-            color: #0f172a;
-            border: 1px solid #cbd5e1;
-            padding: 2px 6px;
-            border-radius: 5px;
-            font-size: 0.79rem;
-            font-weight: 600;
-        }
-
-        .dist-badge {
-            font-size: 0.68rem;
-            font-weight: 700;
-            padding: 3px 7px;
-            border-radius: 5px;
-            text-transform: uppercase;
-            display: inline-block;
-        }
-        .dist-digikey { background: #dc2626; color: #ffffff; }
-        .dist-mouser { background: #1d4ed8; color: #ffffff; }
-        .dist-lcsc { background: #0284c7; color: #ffffff; }
-        .dist-notfound { background: #64748b; color: #ffffff; }
-
-        .vendor-link-grid {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 4px;
-            margin-top: 6px;
-        }
-
-        .vendor-chip {
-            font-size: 0.69rem;
-            font-weight: 700;
-            padding: 2px 7px;
-            border-radius: 4px;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 3px;
-            border: 1px solid transparent;
-        }
-        .vendor-chip-dk { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
-        .vendor-chip-dk:hover { background: #dc2626; color: #fff; }
-        .vendor-chip-ms { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
-        .vendor-chip-ms:hover { background: #2563eb; color: #fff; }
-        .vendor-chip-lcsc { background: #f0f9ff; color: #0369a1; border-color: #bae6fd; }
-        .vendor-chip-lcsc:hover { background: #0284c7; color: #fff; }
-        .vendor-chip-jlc { background: #ecfdf5; color: #047857; border-color: #a7f3d0; }
-        .vendor-chip-jlc:hover { background: #059669; color: #fff; }
-        .vendor-chip-rs { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
-        .vendor-chip-rs:hover { background: #ea580c; color: #fff; }
-
-        .table-crisp {
-            width: 100%;
-            margin-bottom: 0;
-            border-collapse: separate;
-            border-spacing: 0;
-        }
-
-        .table-crisp thead th {
-            background: #0f172a;
-            color: #f8fafc;
-            font-weight: 700;
-            font-size: 0.74rem;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            padding: 10px 10px;
-            border-bottom: 2px solid var(--brand-primary);
-            white-space: nowrap;
-        }
-
-        .table-crisp tbody td {
-            padding: 9px 10px;
-            vertical-align: middle;
-            border-bottom: 1px solid var(--border-light);
-            border-right: 1px solid var(--border-light);
-            font-size: 0.79rem;
-        }
-
-        .cell-mismatch {
-            background-color: var(--status-mismatch-bg) !important;
-            border-left: 4px solid var(--status-mismatch) !important;
-        }
-
-        .param-subline {
-            font-size: 0.72rem;
-            display: block;
-            margin-top: 3px;
-        }
-
-        .alt-card {
-            background: #ffffff;
-            border: 1px solid var(--border-crisp);
-            border-left: 4px solid var(--brand-indigo);
-            border-radius: 7px;
-            padding: 7px 10px;
-            margin-bottom: 6px;
-        }
-
-        .price-badge {
-            font-family: var(--font-mono);
-            font-size: 0.74rem;
-            font-weight: 700;
-            background: #ecfdf5;
-            color: #047857;
-            border: 1px solid #6ee7b7;
-            padding: 2px 7px;
-            border-radius: 5px;
-        }
-
-        .diff-mfr-tag {
-            font-size: 0.66rem;
-            font-weight: 700;
-            background: #eef2ff;
-            color: #4338ca;
-            border: 1px solid #c7d2fe;
-            padding: 1px 5px;
-            border-radius: 4px;
-        }
-    </style>
-</head>
-<body>
-
-    <!-- TOP NAVIGATION -->
-    <nav class="enterprise-navbar d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div>
-            <div class="brand-title">
-                <i class="bi bi-cpu-fill text-info"></i>
-                <span>HARDWARE DESIGN GUIDE — COMPONENT VERIFICATION & SOURCING SUITE</span>
-            </div>
-            <div class="text-white-50 small" style="font-size: 0.73rem;">
-                Category-Adaptive Parameter Checking &bull; Strict Cross-Manufacturer Alternates &bull; Multi-Vendor Sourcing
-            </div>
-        </div>
-
-        <div class="d-flex align-items-center gap-2">
-            <!-- Currency Switcher -->
-            <div class="currency-pill">
-                <i class="bi bi-currency-exchange text-warning"></i>
-                <span>Currency:</span>
-                <select id="globalCurrencySelect" onchange="onCurrencyChange()">
-                    <option value="INR" selected>₹ INR</option>
-                    <option value="USD">$ USD</option>
-                </select>
-                <span class="text-white-50">|</span>
-                <span>1$ = ₹</span>
-                <input type="number" id="usdToInrRate" value="84.50" step="0.1" style="width: 60px;" onchange="onCurrencyChange()">
-            </div>
-            <button class="btn btn-sm btn-outline-danger" onclick="clearResults()">
-                <i class="bi bi-arrow-counterclockwise"></i> Clear
-            </button>
-        </div>
-    </nav>
-
-    <div class="container-fluid px-4 my-3">
-        <!-- SINGLE COMPONENT MANUAL WORKSPACE -->
-        <div class="crisp-card">
-            <div class="crisp-card-header">
-                <span><i class="bi bi-sliders2-vertical text-primary me-2"></i>Manual Component Parameter Verification & Cross-Manufacturer Sourcing</span>
-                <span class="badge bg-primary">Single Component Engine</span>
-            </div>
-            <div class="crisp-card-body">
-                <!-- Category Tabs -->
-                <div class="small fw-bold text-secondary mb-1">Select Component Category (Adapts Parameter Fields Automatically):</div>
-                <div class="cat-pill-group" id="categoryPillGroup">
-                    <button type="button" class="cat-pill-btn active" data-cat="PASSIVE" onclick="selectCategory('PASSIVE')">
-                        <i class="bi bi-bezier2"></i> Passives (R / L / C)
-                    </button>
-                    <button type="button" class="cat-pill-btn" data-cat="MCU" onclick="selectCategory('MCU')">
-                        <i class="bi bi-cpu"></i> MCU / MPU / Controller
-                    </button>
-                    <button type="button" class="cat-pill-btn" data-cat="MEMORY" onclick="selectCategory('MEMORY')">
-                        <i class="bi bi-memory"></i> Memory (Flash / EEPROM / RAM)
-                    </button>
-                    <button type="button" class="cat-pill-btn" data-cat="POWER" onclick="selectCategory('POWER')">
-                        <i class="bi bi-lightning-fill"></i> Power IC / Regulator
-                    </button>
-                    <button type="button" class="cat-pill-btn" data-cat="SEMI" onclick="selectCategory('SEMI')">
-                        <i class="bi bi-activity"></i> Discrete (MOSFET / Diode)
-                    </button>
+        mountPoint.innerHTML = `
+            <div class="crisp-panel">
+                <div class="crisp-panel-header">
+                    <span><i class="bi bi-file-earmark-spreadsheet-fill text-success me-2"></i>Option B: Bulk Project BOM Upload & Multi-Vendor Verification</span>
+                    <span class="badge bg-success">Any Row Count (10 to 1,000+ Parts)</span>
                 </div>
-
-                <form id="manualForm">
-                    <input type="hidden" id="manCategoryGroup" value="PASSIVE">
-                    <div class="row g-2">
-                        <!-- Standard Identifier Row -->
-                        <div class="col-md-4">
-                            <label class="form-label-crisp text-primary fw-bold">MFG_PN (Part Number)</label>
-                            <input type="text" id="manMpn" class="form-control-crisp" placeholder="e.g., GRM188R71H104KA93D or STM32F103C8T6">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label-crisp">MFG_NAME (Excluded from Alternates)</label>
-                            <input type="text" id="manMfr" class="form-control-crisp" placeholder="e.g., Murata, STMicroelectronics">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label-crisp" id="lblSubType">Sub-Category / Type</label>
-                            <input type="text" id="manType" class="form-control-crisp" placeholder="e.g., MLCC Capacitor">
-                        </div>
-
-                        <!-- Dynamic Parameter Slots -->
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP1">1. Value</label>
-                            <input type="text" id="manP1" class="form-control-crisp" placeholder="e.g., 100nF, 4.7kΩ">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP2">2. Tolerance / Memory</label>
-                            <input type="text" id="manP2" class="form-control-crisp" placeholder="e.g., ±10%, ±1%">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP3">3. Voltage Rating / Vcc</label>
-                            <input type="text" id="manP3" class="form-control-crisp" placeholder="e.g., 50V, 3.3V">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP4">4. Package / Footprint</label>
-                            <input type="text" id="manPackage" class="form-control-crisp" placeholder="e.g., 0603, LQFP-48">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP5">5. Current / Power / Speed</label>
-                            <input type="text" id="manP5" class="form-control-crisp" placeholder="e.g., 0.1W, 2A">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP6">6. Polarity / Dielectric / Bus</label>
-                            <input type="text" id="manP6" class="form-control-crisp" placeholder="e.g., X7R, Non-Polarized">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP7">7. Operating Temp Range</label>
-                            <input type="text" id="manP7" class="form-control-crisp" placeholder="e.g., -55°C to +125°C">
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label-crisp" id="lblP8">8. Details / Notes</label>
-                            <input type="text" id="manP8" class="form-control-crisp" placeholder="e.g., AEC-Q200, Low ESR">
-                        </div>
+                <div class="crisp-panel-body">
+                    <!-- Dropzone -->
+                    <div class="p-4 border-2 border-dashed rounded text-center bg-light" 
+                         style="border: 2px dashed var(--brand-primary) !important; cursor: pointer;"
+                         onclick="document.getElementById('excelFileInput').click();">
+                        <i class="bi bi-cloud-arrow-up-fill text-primary fs-1"></i>
+                        <h6 class="fw-bold mt-2 mb-1">Drag & Drop or Click to Select BOM Spreadsheet</h6>
+                        <p class="text-muted small mb-2">
+                            Supports .xlsx, .xls, and .csv files. Automatically isolates <code>MFG_PN</code> & <code>MFG_NAME</code> across passive components, ICs, and MCUs.
+                        </p>
+                        <input type="file" id="excelFileInput" class="d-none" accept=".xlsx, .xls, .csv">
+                        <button type="button" class="btn btn-sm btn-primary fw-bold px-3 shadow-sm">Browse File</button>
                     </div>
 
-                    <div class="d-flex gap-2 mt-3">
-                        <button type="submit" id="btnSubmit" class="btn btn-primary btn-sm flex-grow-1 fw-bold py-2">
-                            <i class="bi bi-search me-1"></i> Verify Component & Suggest Cross-Manufacturer Alternates
+                    <div class="mt-3 p-2 rounded bg-light border d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="small fw-bold text-dark" id="bomFileNameText">No file uploaded</div>
+                            <div class="text-muted" style="font-size: 0.72rem;">Automatically skips title headers and identifies primary component columns</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="BulkBomEngine.downloadDemoTemplate()">
+                            <i class="bi bi-download me-1"></i> Sample Template (.xlsx)
                         </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm px-3" onclick="clearInputs()">Clear</button>
                     </div>
-                </form>
+                </div>
             </div>
-        </div>
 
-        <!-- RESULTS TABLE CARD -->
-        <div id="resultsCard" class="crisp-card d-none">
-            <div class="crisp-card-header">
-                <span><i class="bi bi-shield-check text-success me-2"></i>Verification & Cross-Manufacturer Alternate Sourcing Report</span>
-                <span id="badgeStatus" class="badge bg-dark"></span>
+            <!-- Interactive DigiKey MyLists-Style Column Mapper -->
+            <div id="bomMapperContainer" class="crisp-panel border-primary d-none my-3">
+                <div class="crisp-panel-header bg-primary text-white">
+                    <span><i class="bi bi-diagram-3-fill me-2"></i>Step 2: Confirm BOM Column Mapping (Auto-Matched)</span>
+                    <span id="bomDetectedCountBadge" class="badge bg-white text-primary fw-bold">0 Rows Detected</span>
+                </div>
+                <div class="crisp-panel-body">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Sheet Tab</label>
+                            <select id="sheetPickerSelect" class="form-select-custom" onchange="BulkBomEngine.onSheetSelected()"></select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label-custom">Header Row</label>
+                            <input type="number" id="headerRowInput" class="form-control-custom" min="1" max="50" value="1" onchange="BulkBomEngine.rebuildMapperSelectors()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom text-danger fw-bold">MFG_PN (Part No) *</label>
+                            <select id="selMapMpn" class="form-select-custom border-danger" onchange="BulkBomEngine.updatePreviewStrip()"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom text-primary fw-bold">MFG_NAME (Manufacturer)</label>
+                            <select id="selMapMfr" class="form-select-custom border-primary" onchange="BulkBomEngine.updatePreviewStrip()"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Category / Type</label>
+                            <select id="selMapType" class="form-select-custom" onchange="BulkBomEngine.updatePreviewStrip()"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Value / Comment</label>
+                            <select id="selMapVal" class="form-select-custom" onchange="BulkBomEngine.updatePreviewStrip()"></select>
+                        </div>
+                        <div class="col-md-1">
+                            <label class="form-label-custom">Tolerance</label>
+                            <select id="selMapTol" class="form-select-custom"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Voltage Rating</label>
+                            <select id="selMapVolt" class="form-select-custom"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Package / Footprint</label>
+                            <select id="selMapPkg" class="form-select-custom" onchange="BulkBomEngine.updatePreviewStrip()"></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label-custom">Description / Details</label>
+                            <select id="selMapDesc" class="form-select-custom"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label-custom">Current / Power</label>
+                            <select id="selMapCurr" class="form-select-custom"></select>
+                        </div>
+                        <div class="col-md-2">
+                            <button id="btnExecuteBomAudit" class="btn btn-success btn-sm w-100 fw-bold py-2 shadow-sm" onclick="BulkBomEngine.executeAudit()">
+                                <i class="bi bi-play-circle-fill me-1"></i> Run Bulk Verification
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Live Mapping Preview Strip -->
+                    <div id="bomLivePreviewBox" class="p-2 mt-3 rounded bg-dark text-white font-monospace" style="font-size: 0.76rem;"></div>
+
+                    <!-- Paced Progress Indicator -->
+                    <div id="bomProgressRow" class="mt-3 d-none">
+                        <div class="d-flex justify-content-between small mb-1 fw-bold">
+                            <span id="bomProgressStatus" class="text-primary">Querying Official Distributor APIs...</span>
+                            <span id="bomProgressTally">0 / 0</span>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div id="bomProgressMeter" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="table-responsive">
-                <table class="table table-crisp">
-                    <thead>
-                        <tr>
-                            <th style="min-width: 200px;">MFG_PN & Distributor Links</th>
-                            <th style="min-width: 150px;">Category &<br>MFG_NAME</th>
-                            <th style="min-width: 100px;">Unit Price<br><small class="text-info fw-normal">(INR / USD)</small></th>
-                            <th id="thP1" style="min-width: 130px;">Primary Value<br><small class="text-white-50 fw-normal">(User vs Web)</small></th>
-                            <th id="thP2" style="min-width: 120px;">Tolerance / Memory<br><small class="text-white-50 fw-normal">(User vs Web)</small></th>
-                            <th id="thP3" style="min-width: 120px;">Voltage / Vcc<br><small class="text-white-50 fw-normal">(User vs Web)</small></th>
-                            <th style="min-width: 120px;">Package / Footprint<br><small class="text-white-50 fw-normal">(User vs Web)</small></th>
-                            <th style="min-width: 180px;">Details & Extended Specs</th>
-                            <th style="min-width: 150px;">Audit Status & Mistakes</th>
-                            <th style="min-width: 320px;">Cross-Manufacturer Alternates<br><small class="text-warning fw-normal">(Excluding Entered Manufacturer)</small></th>
-                        </tr>
-                    </thead>
-                    <tbody id="auditTableBody"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+        `;
 
-    <script>
-        // =========================================================================
-        // 1. HARDCODED TEAM API CREDENTIALS & CURRENCY CONVERTER
-        // =========================================================================
-        const DEFAULT_MOUSER_KEY = "f7821465-5e59-4e6d-be6d-3c90a4dbdcc8";
-        const DEFAULT_DK_CLIENT_ID = "721KJZkRHjwTno2Vzmd5tepqWmUjGoGJyfduHNMJ66tqL2f9";
-        const DEFAULT_DK_CLIENT_SECRET = "TvMmGwNIbvBzyKTvmI8uITeA65m9sEHJug5AjpZK6UFOmBADRDkjOOlI0mhgyICD";
+        this.injectExecutiveSummarySlot();
+        this.bindEvents();
+    },
 
-        let currentAuditData = [];
+    // 2. Inject Executive Summary Box right above the results table
+    injectExecutiveSummarySlot() {
+        const resultsWrapper = document.getElementById('resultsCardWrapper');
+        if (!resultsWrapper) return;
 
-        function getSelectedCurrency() {
-            return document.getElementById('globalCurrencySelect').value || 'INR';
+        // Create or replace summary container
+        let summaryContainer = document.getElementById('bomExecutiveSummaryArea');
+        if (!summaryContainer) {
+            summaryContainer = document.createElement('div');
+            summaryContainer.id = 'bomExecutiveSummaryArea';
+            summaryContainer.className = 'd-none mb-3';
+            resultsWrapper.parentNode.insertBefore(summaryContainer, resultsWrapper);
         }
-        function getExchangeRate() {
-            const r = parseFloat(document.getElementById('usdToInrRate').value);
-            return (!isNaN(r) && r > 1) ? r : 84.50;
-        }
-        function formatPrice(usdAmount) {
-            if (!usdAmount || isNaN(usdAmount) || usdAmount <= 0) return "Check Web";
-            const curr = getSelectedCurrency();
-            const rate = getExchangeRate();
-            if (curr === 'INR') {
-                const inr = usdAmount * rate;
-                return inr < 1 ? `₹${inr.toFixed(3)}` : `₹${inr.toFixed(2)}`;
-            } else {
-                return usdAmount < 0.1 ? `$${usdAmount.toFixed(4)}` : `$${usdAmount.toFixed(2)}`;
-            }
-        }
-        function onCurrencyChange() {
-            if (currentAuditData.length > 0) renderTable();
-        }
+    },
 
-        // =========================================================================
-        // 2. DYNAMIC CATEGORY SCHEMAS
-        // =========================================================================
-        const SCHEMAS = {
-            PASSIVE: {
-                subLabel: "Passive Type", subPlace: "e.g., MLCC Capacitor, Chip Resistor",
-                p1: "1. Value (Cap/Res/Ind)", p1P: "e.g., 100nF, 4.7kΩ", thP1: "Value",
-                p2: "2. Tolerance", p2P: "e.g., ±10%, ±1%", thP2: "Tolerance",
-                p3: "3. Voltage Rating", p3P: "e.g., 50V, 16V", thP3: "Voltage",
-                p5: "5. Power / Current", p5P: "e.g., 0.1W, 1.5A",
-                p6: "6. Dielectric / Polarity", p6P: "e.g., X7R, Non-Polarized"
-            },
-            MCU: {
-                subLabel: "MCU Architecture", subPlace: "e.g., 32-Bit ARM Cortex-M3",
-                p1: "1. Core & Max Clock", p1P: "e.g., Cortex-M3 @ 72MHz", thP1: "Core & Clock",
-                p2: "2. Flash / RAM Size", p2P: "e.g., 64KB Flash / 20KB RAM", thP2: "Flash / RAM",
-                p3: "3. Supply Voltage (Vcc)", p3P: "e.g., 2.0V to 3.6V", thP3: "Supply Vcc",
-                p5: "5. Interfaces / Peripherals", p5P: "e.g., SPI, I2C, USB, CAN",
-                p6: "6. ADC / DAC Bits", p6P: "e.g., 10x12-bit ADC"
-            },
-            MEMORY: {
-                subLabel: "Memory Type", subPlace: "e.g., Serial NOR Flash, EEPROM",
-                p1: "1. Capacity / Density", p1P: "e.g., 128Mbit (16MB), 256Kbit", thP1: "Capacity",
-                p2: "2. Bus Interface", p2P: "e.g., Quad-SPI @ 133MHz, I2C", thP2: "Bus Interface",
-                p3: "3. Supply Voltage (Vcc)", p3P: "e.g., 2.7V to 3.6V", thP3: "Supply Vcc",
-                p5: "5. Access Time / Write Speed", p5P: "e.g., 6ns, 5ms Write",
-                p6: "6. Organization", p6P: "e.g., 16M x 8, 32K x 8"
-            },
-            POWER: {
-                subLabel: "Power IC Topology", subPlace: "e.g., Buck Converter, LDO Regulator",
-                p1: "1. Output Voltage (Vout)", p1P: "e.g., 3.3V Fixed, Adj", thP1: "Output Vout",
-                p2: "2. Output Current (Iout)", p2P: "e.g., 3A, 1A, 500mA", thP2: "Max Iout",
-                p3: "3. Input Voltage (Vin)", p3P: "e.g., 4.5V to 28V, Max 36V", thP3: "Input Vin",
-                p5: "5. Freq / Dropout", p5P: "e.g., 500kHz, 1.1V Dropout",
-                p6: "6. Topology Configuration", p6P: "e.g., Buck Step-Down, Positive Fixed"
-            },
-            SEMI: {
-                subLabel: "Discrete Component Type", subPlace: "e.g., N-Channel MOSFET, Schottky",
-                p1: "1. Continuous Current (Id/If)", p1P: "e.g., 220mA, 3A", thP1: "Current Id/If",
-                p2: "2. Rds(on) / Forward Vf", p2P: "e.g., 3.5Ω @ 5V, 0.45V Vf", thP2: "Rds(on) / Vf",
-                p3: "3. Max Breakdown (Vds/Vr)", p3P: "e.g., 50V, 40V", thP3: "Breakdown Volt",
-                p5: "5. Power Dissipation", p5P: "e.g., 350mW, 1W",
-                p6: "6. Channel Configuration", p6P: "e.g., N-Channel, Single"
-            }
-        };
+    // 3. Bind File Input Events
+    bindEvents() {
+        const fileInput = document.getElementById('excelFileInput');
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        function selectCategory(catKey) {
-            document.getElementById('manCategoryGroup').value = catKey;
-            document.querySelectorAll('#categoryPillGroup .cat-pill-btn').forEach(btn => {
-                btn.classList.toggle('active', btn.getAttribute('data-cat') === catKey);
-            });
-            const s = SCHEMAS[catKey] || SCHEMAS.PASSIVE;
-            document.getElementById('lblSubType').innerText = s.subLabel;
-            document.getElementById('manType').placeholder = s.subPlace;
-            document.getElementById('lblP1').innerText = s.p1;
-            document.getElementById('manP1').placeholder = s.p1P;
-            document.getElementById('lblP2').innerText = s.p2;
-            document.getElementById('manP2').placeholder = s.p2P;
-            document.getElementById('lblP3').innerText = s.p3;
-            document.getElementById('manP3').placeholder = s.p3P;
-            document.getElementById('lblP5').innerText = s.p5;
-            document.getElementById('manP5').placeholder = s.p5P;
-            document.getElementById('lblP6').innerText = s.p6;
-            document.getElementById('manP6').placeholder = s.p6P;
-            document.getElementById('thP1').innerHTML = `${s.thP1}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
-            document.getElementById('thP2').innerHTML = `${s.thP2}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
-            document.getElementById('thP3').innerHTML = `${s.thP3}<br><small class="text-white-50 fw-normal">(User vs Web)</small>`;
-        }
+            document.getElementById('bomFileNameText').innerText = `Active BOM: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const data = new Uint8Array(evt.target.result);
+                this.state.rawWorkbook = XLSX.read(data, { type: 'array' });
 
-        // =========================================================================
-        // 3. MULTI-CATEGORY REFERENCE DATABASE (WITH PRE-BUILT DIFFERENT-MFR ALTERNATES)
-        // =========================================================================
-        const COMPONENT_DB = {
-            "STM32F103C8T6": {
-                mfr: "STMicroelectronics", type: "32-Bit ARM Cortex-M3 MCU",
-                val: "72MHz Cortex-M3", tol: "64KB Flash / 20KB RAM", volt: "3.3V (2.0V~3.6V)", pkg: "LQFP-48",
-                curr: "37 GPIO, USB, CAN", pol: "10x12-bit ADC", temp: "-40°C to +85°C",
-                desc: "IC MCU 32BIT 64KB FLASH 48LQFP ARM Cortex-M3", priceUsd: 1.65,
-                source: "DigiKey / Mouser",
-                alternates: [
-                    { mpn: "GD32F103C8T6", mfr: "GigaDevice", source: "LCSC / JLCPCB", lcscCode: "C24305", priceUsd: 0.92, specs: "Pin-Compatible Cortex-M3 | 108MHz | 64KB Flash | LQFP-48" },
-                    { mpn: "APM32F103C8T6", mfr: "Geehy Semiconductor", source: "LCSC / DigiKey", lcscCode: "C506932", priceUsd: 0.85, specs: "Pin-Compatible Cortex-M3 | 96MHz | 64KB Flash | LQFP-48" },
-                    { mpn: "CH32F103C8T6", mfr: "WCH", source: "JLCPCB / LCSC", lcscCode: "C434517", priceUsd: 0.78, specs: "Pin-Compatible Cortex-M3 | 72MHz | 64KB Flash | LQFP-48" },
-                    { mpn: "AT32F403ACGU7", mfr: "Artery", source: "Mouser / LCSC", lcscCode: "C508420", priceUsd: 1.18, specs: "32-Bit ARM MCU | 64KB+ Flash | 3.3V | 48-Pin" }
-                ]
-            },
-            "ATMEGA328P-AU": {
-                mfr: "Microchip Technology", type: "8-Bit AVR Microcontroller",
-                val: "20MHz 8-Bit AVR", tol: "32KB Flash / 2KB SRAM", volt: "5V (1.8V~5.5V)", pkg: "TQFP-32",
-                curr: "23 GPIO, SPI, I2C", pol: "8x10-bit ADC", temp: "-40°C to +85°C",
-                desc: "IC MCU 8BIT 32KB FLASH 32TQFP AVR 20MHz", priceUsd: 2.15,
-                source: "DigiKey / Mouser",
-                alternates: [
-                    { mpn: "LGT8F328P-LQFP32", mfr: "LogicGreen", source: "LCSC / JLCPCB", lcscCode: "C508198", priceUsd: 0.58, specs: "Pin-Compatible 8-Bit AVR | 32MHz | 32KB Flash | TQFP-32" },
-                    { mpn: "STM8S005K6T6C", mfr: "STMicroelectronics", source: "DigiKey / Mouser", lcscCode: "C18715", priceUsd: 0.75, specs: "8-Bit MCU | 16MHz | 32KB Flash | 5V | LQFP-32" },
-                    { mpn: "N76E003AT20", mfr: "Nuvoton", source: "DigiKey / LCSC", lcscCode: "C90466", priceUsd: 0.45, specs: "8-Bit 8051 MCU | 18KB Flash | 5V | TSSOP-20" }
-                ]
-            },
-            "W25Q128JVSIQ": {
-                mfr: "Winbond Electronics", type: "Serial NOR Flash Memory",
-                val: "128Mbit (16MB)", tol: "Quad-SPI @ 133MHz", volt: "3.3V (2.7V~3.6V)", pkg: "SOIC-8",
-                curr: "16M x 8 Organization", pol: "Non-Volatile NOR", temp: "-40°C to +85°C",
-                desc: "IC FLASH 128MBIT SPI/QUAD 133MHZ 8SOIC", priceUsd: 0.98,
-                source: "DigiKey / Mouser",
-                alternates: [
-                    { mpn: "GD25Q128ESIG", mfr: "GigaDevice", source: "LCSC / DigiKey", lcscCode: "C284527", priceUsd: 0.68, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOIC-8" },
-                    { mpn: "MX25L12833FM2I-10G", mfr: "Macronix (MXIC)", source: "DigiKey / Mouser", lcscCode: "C134053", priceUsd: 1.05, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOP-8" },
-                    { mpn: "IS25LP128F-JBLE", mfr: "ISSI", source: "Mouser / DigiKey", lcscCode: "C426198", priceUsd: 1.12, specs: "128Mbit (16MB) | Quad-SPI 133MHz | 3.3V | SOIC-8" }
-                ]
-            },
-            "AMS1117-3.3": {
-                mfr: "Advanced Monolithic Systems", type: "LDO Linear Voltage Regulator",
-                val: "3.3V Fixed", tol: "1A Max Current", volt: "15V Max Vin", pkg: "SOT-223",
-                curr: "1.1V Dropout @ 1A", pol: "Positive Fixed", temp: "-40°C to +125°C",
-                desc: "IC REG LINEAR 3.3V 1A SOT223 Low Dropout Regulator", priceUsd: 0.08,
-                source: "LCSC / JLCPCB",
-                alternates: [
-                    { mpn: "LM1117IMPX-3.3/NOPB", mfr: "Texas Instruments", source: "DigiKey / Mouser", lcscCode: "C8746", priceUsd: 0.42, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" },
-                    { mpn: "LD1117S33TR", mfr: "STMicroelectronics", source: "DigiKey / RS PRO", lcscCode: "C8544", priceUsd: 0.28, specs: "3.3V Fixed LDO | 800mA~1A | 15V Vin | SOT-223" },
-                    { mpn: "NCP1117ST33T3G", mfr: "onsemi", source: "Mouser / DigiKey", lcscCode: "C14302", priceUsd: 0.24, specs: "3.3V Fixed LDO | 1A | 20V Max Vin | SOT-223" }
-                ]
-            },
-            "BSS138": {
-                mfr: "onsemi", type: "N-Channel Logic Level MOSFET",
-                val: "220mA Id", tol: "Rds(on) 3.5Ω @ 5V", volt: "50V Vds", pkg: "SOT-23-3",
-                curr: "360mW Power", pol: "N-Channel MOSFET", temp: "-55°C to +150°C",
-                desc: "MOSFET N-CH 50V 220MA SOT-23 Logic Level", priceUsd: 0.04,
-                source: "DigiKey / Mouser",
-                alternates: [
-                    { mpn: "BSS138W-7-F", mfr: "Diodes Incorporated", source: "DigiKey / Mouser", lcscCode: "C19280", priceUsd: 0.035, specs: "N-Ch MOSFET | 200mA | 50V Vds | 3.5Ω | SOT-23" },
-                    { mpn: "BSS138P,215", mfr: "Nexperia", source: "DigiKey / RS PRO", lcscCode: "C82104", priceUsd: 0.038, specs: "N-Ch MOSFET | 360mA | 60V Vds | 1.6Ω | SOT-23" },
-                    { mpn: "2N7002K-T1-GE3", mfr: "Vishay Siliconix", source: "Mouser / DigiKey", lcscCode: "C21480", priceUsd: 0.042, specs: "N-Ch MOSFET | 300mA | 60V Vds | 2Ω | SOT-23" }
-                ]
-            }
-        };
-
-        // =========================================================================
-        // 4. RESOLVER & CROSS-MANUFACTURER ALTERNATE ENGINE
-        // =========================================================================
-        async function resolveSingleComponent(inputData) {
-            const cleanMpn = inputData.mpn.trim().toUpperCase();
-
-            // 1. Check Known Catalog first
-            if (COMPONENT_DB[cleanMpn]) {
-                const item = COMPONENT_DB[cleanMpn];
-                // Strict Cross-Manufacturer Filtering: Filter out any alternate made by the target's manufacturer!
-                const primaryMfr = inputData.mfr || item.mfr;
-                const filteredAlts = item.alternates.filter(a =>
-                    a.mfr.toLowerCase() !== primaryMfr.toLowerCase()
-                );
-
-                return {
-                    found: true,
-                    mpn: cleanMpn,
-                    mfr: item.mfr,
-                    type: item.type,
-                    val: item.val,
-                    tol: item.tol,
-                    volt: item.volt,
-                    pkg: item.pkg,
-                    curr: item.curr,
-                    pol: item.pol,
-                    temp: item.temp,
-                    desc: item.desc,
-                    priceUsd: item.priceUsd,
-                    primarySource: item.source,
-                    badgeClass: "dist-digikey",
-                    productUrl: `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(cleanMpn)}`,
-                    alternates: filteredAlts
-                };
-            }
-
-            // 2. Query Mouser API v1 in real-time
-            try {
-                const res = await fetch(`https://api.mouser.com/api/v1/search/partnumber?apiKey=${encodeURIComponent(DEFAULT_MOUSER_KEY)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        SearchByPartRequest: { mouserPartNumber: cleanMpn, partSearchOptions: "None" }
-                    })
+                const sheetPicker = document.getElementById('sheetPickerSelect');
+                sheetPicker.innerHTML = '';
+                this.state.rawWorkbook.SheetNames.forEach((name, idx) => {
+                    sheetPicker.innerHTML += `<option value="${idx}">${name}</option>`;
                 });
 
-                if (res.ok) {
-                    const data = await res.json();
-                    const parts = (data.SearchResults && data.SearchResults.Parts) || [];
-                    if (parts.length > 0) {
-                        const p = parts.find(x => (x.ManufacturerPartNumber || '').toUpperCase() === cleanMpn) || parts[0];
-                        const fetchedMfr = p.Manufacturer || "Verified Mfr";
-                        const desc = p.Description || "";
-
-                        // Parse price from Mouser price breaks
-                        let unitPriceUsd = 0.15;
-                        if (p.PriceBreaks && p.PriceBreaks.length > 0) {
-                            unitPriceUsd = parseFloat(p.PriceBreaks[0].Price.replace(/[^0-9.]/g, '')) || 0.15;
-                        }
-
-                        // Build strict cross-manufacturer alternates
-                        const primaryMfr = inputData.mfr || fetchedMfr;
-                        const dynamicAlts = generateCrossMfrAlternates(cleanMpn, primaryMfr, inputData);
-
-                        return {
-                            found: true,
-                            mpn: p.ManufacturerPartNumber || cleanMpn,
-                            mfr: fetchedMfr,
-                            type: inputData.type || p.Category || "Integrated Circuit",
-                            val: inputData.p1 || "See Datasheet",
-                            tol: inputData.p2 || "—",
-                            volt: inputData.p3 || "—",
-                            pkg: inputData.package || "SMD",
-                            curr: inputData.p5 || "—",
-                            pol: inputData.p6 || "—",
-                            temp: inputData.p7 || "-40°C to +85°C",
-                            desc: desc || "Official catalog component",
-                            priceUsd: unitPriceUsd,
-                            primarySource: "Mouser Official API",
-                            badgeClass: "dist-mouser",
-                            productUrl: p.ProductDetailUrl || `https://www.mouser.in/c/?q=${encodeURIComponent(cleanMpn)}`,
-                            alternates: dynamicAlts
-                        };
-                    }
-                }
-            } catch (err) {
-                console.warn("Mouser API fetch fallback:", err);
-            }
-
-            // 3. Fallback: Passive EIA Decoder (For Cap/Res)
-            const passiveParsed = decodePassiveMPN(cleanMpn, inputData);
-            if (passiveParsed.recognized) {
-                const primaryMfr = inputData.mfr || passiveParsed.mfr;
-                const passiveAlts = generateCrossMfrAlternates(cleanMpn, primaryMfr, inputData, passiveParsed);
-
-                return {
-                    found: true,
-                    mpn: cleanMpn,
-                    mfr: passiveParsed.mfr,
-                    type: passiveParsed.type,
-                    val: passiveParsed.val,
-                    tol: passiveParsed.tol,
-                    volt: passiveParsed.volt,
-                    pkg: passiveParsed.pkg,
-                    curr: passiveParsed.curr,
-                    pol: "Non-Polarized",
-                    temp: "-55°C to +125°C",
-                    desc: `${passiveParsed.type} ${passiveParsed.val} ${passiveParsed.volt} ${passiveParsed.pkg}`,
-                    priceUsd: 0.012,
-                    primarySource: "DigiKey / LCSC",
-                    badgeClass: "dist-lcsc",
-                    productUrl: `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(cleanMpn)}`,
-                    alternates: passiveAlts
-                };
-            }
-
-            // 4. Not Found
-            return {
-                found: false,
-                mpn: cleanMpn || "EMPTY",
-                mfr: inputData.mfr || "—",
-                type: "—",
-                val: "—", tol: "—", volt: "—", pkg: "—", curr: "—", pol: "—", temp: "—",
-                desc: "Part not found in official catalogs or global EIA decoder.",
-                priceUsd: null,
-                primarySource: "Not Found",
-                badgeClass: "dist-notfound",
-                productUrl: null,
-                alternates: []
+                this.onSheetSelected();
             };
+            reader.readAsArrayBuffer(file);
+        });
+    },
+
+    // 4. Tab Ingestion & Automatic Header Row Detection
+    onSheetSelected() {
+        if (!this.state.rawWorkbook) return;
+        const sheetIdx = parseInt(document.getElementById('sheetPickerSelect').value, 10) || 0;
+        const sheetName = this.state.rawWorkbook.SheetNames[sheetIdx];
+        const sheet = this.state.rawWorkbook.Sheets[sheetName];
+
+        this.state.rawSheetRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false });
+
+        if (this.state.rawSheetRows.length === 0) {
+            alert("The selected worksheet tab is empty.");
+            return;
         }
 
-        // Strict Cross-Manufacturer Alternate Generator (Guarantees Different Manufacturers!)
-        function generateCrossMfrAlternates(targetMpn, primaryMfr, inputData, passiveSpec = null) {
-            const mfrNorm = (primaryMfr || "").toLowerCase();
-            const pkg = inputData.package || (passiveSpec ? passiveSpec.pkg : "0603");
-            const val = inputData.p1 || (passiveSpec ? passiveSpec.val : "100nF");
-            const volt = inputData.p3 || (passiveSpec ? passiveSpec.volt : "50V");
-            const tol = inputData.p2 || (passiveSpec ? passiveSpec.tol : "±10%");
+        // Auto-locate Header Row (scans top 35 rows for MFG_PN / MPN / Part Number / MFG_NAME)
+        let bestRow = 0;
+        let highestScore = -1;
 
-            const candidates = [
-                { mpn: `GRM188R71H104KA93D`, mfr: "Murata", source: "DigiKey", priceUsd: 0.015, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-                { mpn: `CL10B104KB8NNNC`, mfr: "Samsung", source: "Mouser", priceUsd: 0.012, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-                { mpn: `C1608X7R1H104K080AA`, mfr: "TDK", source: "Mouser / RS PRO", priceUsd: 0.016, specs: `${val} | ${volt} | ${pkg} | ${tol}` },
-                { mpn: `CC0603KRX7R9BB104`, mfr: "YAGEO", source: "LCSC / JLCPCB", lcscCode: "C14663", priceUsd: 0.008, specs: `${val} | ${volt} | ${pkg} | ${tol}` }
-            ];
-
-            // Strict Filter: Never suggest the same manufacturer!
-            return candidates.filter(c => !c.mfr.toLowerCase().includes(mfrNorm) && !mfrNorm.includes(c.mfr.toLowerCase())).slice(0, 3);
-        }
-
-        function decodePassiveMPN(mpn, inputData) {
-            let recognized = false;
-            let mfr = "Verified Mfr";
-            let type = "Passive Component";
-            let val = inputData.p1 || "100nF";
-            let volt = inputData.p3 || "50V";
-            let pkg = inputData.package || "0603";
-            let tol = inputData.p2 || "±10%";
-            let curr = "—";
-
-            if (/^GRM/i.test(mpn)) { recognized = true; mfr = "Murata"; type = "MLCC Capacitor"; }
-            else if (/^CL/i.test(mpn)) { recognized = true; mfr = "Samsung"; type = "MLCC Capacitor"; }
-            else if (/^RC/i.test(mpn)) { recognized = true; mfr = "YAGEO"; type = "Chip Resistor"; tol = "±1%"; }
-            else if (/^CRCW/i.test(mpn)) { recognized = true; mfr = "Vishay"; type = "Chip Resistor"; tol = "±1%"; }
-
-            return { recognized, mfr, type, val, volt, pkg, tol, curr };
-        }
-
-        // =========================================================================
-        // 5. FORM SUBMISSION & TABLE RENDERER
-        // =========================================================================
-        document.getElementById('manualForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = document.getElementById('btnSubmit');
-            const orig = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Fetching Live Distributor Specs & Alternates...`;
-
-            const inputData = {
-                mpn: document.getElementById('manMpn').value.trim(),
-                mfr: document.getElementById('manMfr').value.trim(),
-                type: document.getElementById('manType').value.trim(),
-                p1: document.getElementById('manP1').value.trim(),
-                p2: document.getElementById('manP2').value.trim(),
-                p3: document.getElementById('manP3').value.trim(),
-                package: document.getElementById('manPackage').value.trim(),
-                p5: document.getElementById('manP5').value.trim(),
-                p6: document.getElementById('manP6').value.trim(),
-                p7: document.getElementById('manP7').value.trim(),
-                p8: document.getElementById('manP8').value.trim()
-            };
-
-            if (!inputData.mpn && !inputData.p1) {
-                alert("Please enter either a Part Number (MFG_PN) or primary value.");
-                btn.disabled = false;
-                btn.innerHTML = orig;
-                return;
+        for (let i = 0; i < Math.min(35, this.state.rawSheetRows.length); i++) {
+            const row = this.state.rawSheetRows[i];
+            if (!row) continue;
+            let score = 0;
+            row.forEach(cell => {
+                const norm = String(cell || '').toUpperCase().replace(/[^A-Z0-9_]/g, '');
+                if (norm === 'MFG_PN' || norm === 'MFGPN' || norm === 'MPN' || norm.includes('PARTNUMBER') || norm.includes('PARTNO')) score += 12;
+                else if (norm === 'MFG_NAME' || norm === 'MFGNAME' || norm === 'MANUFACTURER' || norm === 'MFR') score += 10;
+                else if (/VALUE|COMMENT|PACKAGE|FOOTPRINT|TOLERANCE|VOLTAGE|DESCRIPTION|DESC|QTY|REFDES/.test(norm)) score += 3;
+            });
+            if (score > highestScore) {
+                highestScore = score;
+                bestRow = i;
             }
+        }
 
-            const fetched = await resolveSingleComponent(inputData);
-            let mismatches = [];
+        this.state.headerRowIdx = bestRow;
+        this.state.originalHeaders = this.state.rawSheetRows[bestRow] || [];
+        
+        document.getElementById('headerRowInput').value = bestRow + 1;
+        document.getElementById('bomMapperContainer').classList.remove('d-none');
+        this.rebuildMapperSelectors();
+    },
 
-            // Parameter Comparison Check
-            const checkDiff = (userV, webV, name) => {
-                if (!userV || webV === "—") return { mismatch: false, html: `<span class="text-muted small">${userV || "Not Given"}</span><span class="param-subline text-primary">Web: ${webV}</span>` };
-                if (userV.toLowerCase().replace(/[^a-z0-9]/g, '') !== webV.toLowerCase().replace(/[^a-z0-9]/g, '')) {
-                    mismatches.push(`${name}: User "${userV}" ≠ Web "${webV}"`);
-                    return { mismatch: true, html: `<span class="fw-bold text-danger">${userV} ✖</span><span class="param-subline text-dark">Web: <strong>${webV}</strong></span>` };
-                }
-                return { mismatch: false, html: `<span class="fw-semibold text-success">${userV} ✔</span><span class="param-subline text-muted">Web: ${webV}</span>` };
-            };
+    // 5. Populate Mapping Dropdowns & Strict Field Identification
+    rebuildMapperSelectors() {
+        const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
+        this.state.headerRowIdx = headerIdx;
+        const headerRow = this.state.rawSheetRows[headerIdx] || [];
+        this.state.originalHeaders = headerRow;
+        const firstDataRow = this.state.rawSheetRows[headerIdx + 1] || [];
 
-            const p1Check = checkDiff(inputData.p1, fetched.val, "Primary Spec");
-            const p2Check = checkDiff(inputData.p2, fetched.tol, "Tolerance/Memory");
-            const p3Check = checkDiff(inputData.p3, fetched.volt, "Voltage");
-            const pkgCheck = checkDiff(inputData.package, fetched.pkg, "Package");
+        // Count non-empty parts
+        let validRows = 0;
+        for (let r = headerIdx + 1; r < this.state.rawSheetRows.length; r++) {
+            if (this.state.rawSheetRows[r] && this.state.rawSheetRows[r].some(c => String(c).trim() !== "")) validRows++;
+        }
+        document.getElementById('bomDetectedCountBadge').innerText = `${validRows} Component Rows Detected`;
 
-            let status = fetched.found ? (mismatches.length > 0 ? "Mismatch Found" : "Verified Clean") : "Part Not Found";
-
-            currentAuditData = [{
-                mpn: fetched.mpn,
-                mfr: fetched.mfr,
-                userMfr: inputData.mfr,
-                type: fetched.type,
-                priceUsd: fetched.priceUsd,
-                primarySource: fetched.primarySource,
-                badgeClass: fetched.badgeClass,
-                productUrl: fetched.productUrl,
-                desc: fetched.desc,
-                curr: fetched.curr, pol: fetched.pol, temp: fetched.temp,
-                p1Check, p2Check, p3Check, pkgCheck,
-                status,
-                mismatches,
-                alternates: fetched.alternates
-            }];
-
-            renderTable();
-            btn.disabled = false;
-            btn.innerHTML = orig;
-            document.getElementById('resultsCard').scrollIntoView({ behavior: 'smooth' });
+        const selects = ['selMapMpn', 'selMapMfr', 'selMapType', 'selMapVal', 'selMapTol', 'selMapVolt', 'selMapPkg', 'selMapDesc', 'selMapCurr'];
+        selects.forEach(id => {
+            const el = document.getElementById(id);
+            el.innerHTML = `<option value="-1">-- Unmapped --</option>`;
+            headerRow.forEach((colName, idx) => {
+                const cleanName = String(colName || `Col ${idx + 1}`).trim();
+                const previewSnippet = String(firstDataRow[idx] || '').trim();
+                const previewText = previewSnippet ? ` (e.g., "${previewSnippet.slice(0, 16)}")` : '';
+                el.innerHTML += `<option value="${idx}">${cleanName}${previewText}</option>`;
+            });
         });
 
-        function renderTable() {
-            const tbody = document.getElementById('auditTableBody');
-            tbody.innerHTML = '';
+        // Smart Mapping Rules (Normalized)
+        const normHeaders = headerRow.map(h => String(h || '').toUpperCase().replace(/[^A-Z0-9]/g, ''));
 
-            currentAuditData.forEach(item => {
-                const enc = encodeURIComponent(item.mpn);
-                const dkUrl = `https://www.digikey.in/en/products/result?keywords=${enc}`;
-                const msUrl = `https://www.mouser.in/c/?q=${enc}`;
-                const lcscUrl = `https://www.lcsc.com/search?q=${enc}`;
-                const jlcUrl = `https://jlcpcb.com/parts/componentSearch?searchTxt=${enc}`;
-                const rsUrl = `https://in.rsdelivers.com/productlist/search?query=${enc}`;
+        const matchCol = (elId, exactNames, fallbackRegex, exclusionRegex = null) => {
+            let idx = normHeaders.findIndex(nh => exactNames.includes(nh));
+            if (idx === -1 && fallbackRegex) {
+                idx = headerRow.findIndex(raw => {
+                    const str = String(raw || '').trim();
+                    if (!str) return false;
+                    if (exclusionRegex && exclusionRegex.test(str)) return false;
+                    return fallbackRegex.test(str);
+                });
+            }
+            if (idx !== -1) document.getElementById(elId).value = idx;
+        };
 
-                const statusBadge = item.status === "Verified Clean"
-                    ? `<span class="badge bg-success">✔ Verified Clean</span>`
-                    : (item.status === "Mismatch Found"
-                        ? `<span class="badge bg-danger">⚠ Mismatch (${item.mismatches.length})</span>`
-                        : `<span class="badge bg-secondary">✖ Not Found</span>`);
+        matchCol('selMapMpn', ['MFGPN', 'MPN', 'MANUFACTURERPARTNUMBER', 'MFGPARTNUMBER', 'PARTNUMBER', 'PARTNO', 'PN'], /mfg[_\s-]*p\/?n|mpn|part[_\s-]*(number|no)|p\/n/i, /name|vendor|mfr_name/i);
+        matchCol('selMapMfr', ['MFGNAME', 'MFRNAME', 'MANUFACTURER', 'MANUFACTURERNAME', 'MFG', 'MFR', 'VENDOR', 'BRAND'], /mfg[_\s-]*name|mfr[_\s-]*name|manufacturer|vendor|brand|^mfg$|^mfr$/i, /pn|part|number|no/i);
+        matchCol('selMapType', ['CATEGORY', 'COMPONENTTYPE', 'TYPE', 'PARTTYPE'], /category|component[_\s-]*type|^type$/i);
+        matchCol('selMapVal', ['VALUE', 'VAL', 'COMMENT', 'CAPACITANCE', 'RESISTANCE'], /^value$|^val$|comment|capacitance|resistance/i);
+        matchCol('selMapTol', ['TOLERANCE', 'TOL'], /^tol|tolerance/i);
+        matchCol('selMapVolt', ['VOLTAGE', 'VOLT', 'RATEDVOLTAGE', 'VDC'], /^volt|voltage|vdc/i);
+        matchCol('selMapPkg', ['PACKAGE', 'FOOTPRINT', 'CASE', 'PCBFOOTPRINT', 'SIZE'], /package|footprint|case|size/i);
+        matchCol('selMapDesc', ['DESCRIPTION', 'DESC', 'DETAILS', 'SPECIFICATION'], /^desc|description|detail|spec/i);
+        matchCol('selMapCurr', ['CURRENT', 'POWER', 'WATTS'], /current|power|watt|amp/i);
 
-                // Render working cross-manufacturer alternates
-                let altsHtml = `<span class="text-muted small">No cross-mfr alternates found</span>`;
-                if (item.alternates && item.alternates.length > 0) {
-                    altsHtml = item.alternates.map(a => {
-                        const aEnc = encodeURIComponent(a.mpn);
-                        const altLcsc = a.lcscCode ? `https://www.lcsc.com/product-detail/${a.lcscCode}.html` : `https://www.lcsc.com/search?q=${aEnc}`;
-                        const altDk = `https://www.digikey.in/en/products/result?keywords=${aEnc}`;
-                        const altPrice = formatPrice(a.priceUsd);
+        this.updatePreviewStrip();
+    },
 
-                        return `<div class="alt-card">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <a href="${altDk}" target="_blank" class="fw-bold text-decoration-none"><code>${a.mpn}</code> ↗</a>
-                                <span class="price-badge">${altPrice}</span>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center mt-1">
-                                <span class="diff-mfr-tag"><i class="bi bi-shield-check"></i> Different Mfr: ${a.mfr}</span>
-                                <span class="text-muted" style="font-size:0.69rem;">${a.source}</span>
-                            </div>
-                            <div class="text-muted small mt-1" style="font-size:0.71rem;">${a.specs}</div>
-                            <div class="vendor-link-grid mt-1">
-                                <a href="${altDk}" target="_blank" class="vendor-chip vendor-chip-dk">DigiKey ↗</a>
-                                <a href="https://www.mouser.in/c/?q=${aEnc}" target="_blank" class="vendor-chip vendor-chip-ms">Mouser ↗</a>
-                                <a href="${altLcsc}" target="_blank" class="vendor-chip vendor-chip-lcsc">LCSC ↗</a>
-                            </div>
-                        </div>`;
-                    }).join('');
-                }
+    // 6. Update Live Mapping Confirmation Strip
+    updatePreviewStrip() {
+        const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
+        const mpnIdx = parseInt(document.getElementById('selMapMpn').value, 10);
+        const mfrIdx = parseInt(document.getElementById('selMapMfr').value, 10);
+        const valIdx = parseInt(document.getElementById('selMapVal').value, 10);
+        const pkgIdx = parseInt(document.getElementById('selMapPkg').value, 10);
 
-                const tr = `<tr>
-                    <td>
-                        <div class="fw-bold"><code>${item.mpn}</code></div>
-                        <div class="mt-1"><span class="dist-badge ${item.badgeClass}">${item.primarySource}</span></div>
-                        <div class="vendor-link-grid">
-                            <a href="${dkUrl}" target="_blank" class="vendor-chip vendor-chip-dk">DigiKey ↗</a>
-                            <a href="${msUrl}" target="_blank" class="vendor-chip vendor-chip-ms">Mouser ↗</a>
-                            <a href="${lcscUrl}" target="_blank" class="vendor-chip vendor-chip-lcsc">LCSC ↗</a>
-                            <a href="${jlcUrl}" target="_blank" class="vendor-chip vendor-chip-jlc">JLCPCB ↗</a>
-                            <a href="${rsUrl}" target="_blank" class="vendor-chip vendor-chip-rs">RS PRO ↗</a>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="fw-bold text-dark">${item.type}</div>
-                        <small class="text-muted">Mfr: <strong>${item.mfr}</strong></small>
-                    </td>
-                    <td><span class="price-badge">${formatPrice(item.priceUsd)}</span></td>
-                    <td class="${item.p1Check.mismatch ? 'cell-mismatch' : ''}">${item.p1Check.html}</td>
-                    <td class="${item.p2Check.mismatch ? 'cell-mismatch' : ''}">${item.p2Check.html}</td>
-                    <td class="${item.p3Check.mismatch ? 'cell-mismatch' : ''}">${item.p3Check.html}</td>
-                    <td class="${item.pkgCheck.mismatch ? 'cell-mismatch' : ''}">${item.pkgCheck.html}</td>
-                    <td>
-                        <small class="d-block text-secondary">${item.desc}</small>
-                        <small class="text-muted" style="font-size:0.7rem;">Current/Power: ${item.curr} | Polarity: ${item.pol} | Temp: ${item.temp}</small>
-                    </td>
-                    <td>
-                        ${statusBadge}
-                        <div class="text-danger small mt-1" style="font-size:0.72rem;">${item.mismatches.join('<br>')}</div>
-                    </td>
-                    <td>${altsHtml}</td>
-                </tr>`;
-                tbody.innerHTML += tr;
+        const sample = [];
+        for (let r = headerIdx + 1; r < this.state.rawSheetRows.length && sample.length < 2; r++) {
+            const row = this.state.rawSheetRows[r];
+            if (!row || row.every(c => String(c).trim() === "")) continue;
+            sample.push({
+                rowNum: r + 1,
+                mpn: mpnIdx >= 0 ? String(row[mpnIdx] || '').trim() : "(Unmapped)",
+                mfr: mfrIdx >= 0 ? String(row[mfrIdx] || '').trim() : "(Unmapped)",
+                val: valIdx >= 0 ? String(row[valIdx] || '').trim() : "(Unmapped)",
+                pkg: pkgIdx >= 0 ? String(row[pkgIdx] || '').trim() : "(Unmapped)"
+            });
+        }
+
+        const box = document.getElementById('bomLivePreviewBox');
+        if (sample.length === 0) {
+            box.innerHTML = `<span class="text-danger fw-bold">⚠ No component data found below Header Row ${headerIdx + 1}. Adjust Header Row number.</span>`;
+            return;
+        }
+
+        box.innerHTML = `<div class="text-warning fw-bold mb-1">✔ Auto-Captured Data Preview (Confirming Row Extraction):</div>` +
+            sample.map(s => 
+                `<div>Row ${s.rowNum} &rarr; <strong>MFG_PN:</strong> <code>${s.mpn || 'EMPTY'}</code> | <strong>MFG_NAME:</strong> <code>${s.mfr || '—'}</code> | <strong>Value:</strong> <code>${s.val || '—'}</code> | <strong>Package:</strong> <code>${s.pkg || '—'}</code></div>`
+            ).join('');
+    },
+
+    // 7. Execute Batch Audit via Component Intelligence Agent
+    async executeAudit() {
+        const jobId = ++this.state.activeJobId;
+        const headerIdx = Math.max(0, parseInt(document.getElementById('headerRowInput').value, 10) - 1);
+        const getCol = (id) => parseInt(document.getElementById(id).value, 10);
+
+        const mpnIdx = getCol('selMapMpn');
+        const mfrIdx = getCol('selMapMfr');
+        const typeIdx = getCol('selMapType');
+        const valIdx = getCol('selMapVal');
+        const tolIdx = getCol('selMapTol');
+        const voltIdx = getCol('selMapVolt');
+        const pkgIdx = getCol('selMapPkg');
+        const descIdx = getCol('selMapDesc');
+        const currIdx = getCol('selMapCurr');
+
+        const queue = [];
+        for (let r = headerIdx + 1; r < this.state.rawSheetRows.length; r++) {
+            const row = this.state.rawSheetRows[r];
+            if (!row || row.every(c => String(c).trim() === "")) continue;
+
+            const mpn = mpnIdx >= 0 ? String(row[mpnIdx] || '').trim() : "";
+            const mfr = mfrIdx >= 0 ? String(row[mfrIdx] || '').trim() : "";
+            const val = valIdx >= 0 ? String(row[valIdx] || '').trim() : "";
+            const desc = descIdx >= 0 ? String(row[descIdx] || '').trim() : "";
+
+            if (!mpn && !val && !desc) continue;
+            if (/^(dnp|do not populate|none|n\/a|-)$/i.test(mpn) && !val) continue;
+
+            queue.push({
+                rowNum: r + 1,
+                originalRowData: row, // Keeps original row intact for export!
+                mpn,
+                mfr,
+                type: typeIdx >= 0 ? String(row[typeIdx] || '').trim() : "",
+                p1: val,
+                p2: tolIdx >= 0 ? String(row[tolIdx] || '').trim() : "",
+                p3: voltIdx >= 0 ? String(row[voltIdx] || '').trim() : "",
+                package: pkgIdx >= 0 ? String(row[pkgIdx] || '').trim() : "",
+                p5: currIdx >= 0 ? String(row[currIdx] || '').trim() : "",
+                desc
+            });
+        }
+
+        if (queue.length === 0) {
+            alert("No valid component rows found to audit. Please confirm your column mapping.");
+            return;
+        }
+
+        // Reset State
+        ComponentAgent.state.auditRecords = [];
+        const progressRow = document.getElementById('bomProgressRow');
+        const meter = document.getElementById('bomProgressMeter');
+        const tally = document.getElementById('bomProgressTally');
+        progressRow.classList.remove('d-none');
+
+        const tableWrapper = document.getElementById('resultsCardWrapper');
+        tableWrapper.classList.remove('d-none');
+
+        // Sequentially execute through Component Intelligence Agent
+        for (let i = 0; i < queue.length; i++) {
+            if (jobId !== this.state.activeJobId) return;
+
+            const item = queue[i];
+            tally.innerText = `${i + 1} / ${queue.length} Components`;
+            meter.style.width = `${Math.round(((i + 1) / queue.length) * 100)}%`;
+
+            const fetched = await ComponentAgent.inspectComponent(item);
+            const evaluation = ComponentAgent.evaluateDiscrepancies(item, fetched);
+
+            ComponentAgent.state.auditRecords.push({
+                index: i + 1,
+                originalRowData: item.originalRowData, // Retained for appending in export
+                input: item,
+                fetched: fetched,
+                evaluation: evaluation,
+                priceUsd: fetched.priceUsd,
+                status: evaluation.status,
+                alternates: fetched.alternates || []
             });
 
-            document.getElementById('badgeStatus').innerText = `${currentAuditData.length} Component Audited`;
-            document.getElementById('resultsCard').classList.remove('d-none');
+            // Stream results to table periodically
+            if (i % 2 === 0 || i === queue.length - 1) {
+                ComponentAgent.recalculateKPIs();
+                ManualEntryUI.renderTable();
+            }
         }
 
-        function clearInputs() {
-            document.getElementById('manualForm').reset();
+        if (jobId === this.state.activeJobId) {
+            setTimeout(() => progressRow.classList.add('d-none'), 800);
+            this.renderExecutiveSummary(ComponentAgent.state.auditRecords);
+            document.getElementById('bomExecutiveSummaryArea').scrollIntoView({ behavior: 'smooth' });
+        }
+    },
+
+    // 8. Render Critical BOM Executive Summary Card & Table
+    renderExecutiveSummary(records) {
+        const summaryArea = document.getElementById('bomExecutiveSummaryArea');
+        if (!summaryArea) return;
+
+        const total = records.length;
+        const clean = records.filter(r => r.status === "Verified Clean").length;
+        const mismatch = records.filter(r => r.status === "Mismatch Found").length;
+        const notFound = records.filter(r => r.status === "Part Not Found").length;
+        const healthScore = total > 0 ? Math.round((clean / total) * 100) : 0;
+
+        // Categorize Risk Levels
+        const highRiskItems = records.filter(r => r.status === "Part Not Found");
+        const medRiskItems = records.filter(r => r.status === "Mismatch Found");
+
+        let healthColor = healthScore >= 80 ? 'text-success' : (healthScore >= 50 ? 'text-warning' : 'text-danger');
+        let healthBg = healthScore >= 80 ? 'bg-success' : (healthScore >= 50 ? 'bg-warning' : 'bg-danger');
+
+        summaryArea.innerHTML = `
+            <div class="crisp-panel border-dark shadow-sm">
+                <div class="crisp-panel-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-speedometer2 text-warning me-2"></i>Executive BOM Parsing & Sourcing Health Summary</span>
+                    <span class="badge ${healthBg}">BOM Health Score: ${healthScore}%</span>
+                </div>
+                <div class="crisp-panel-body">
+                    <!-- Key Metric Badges -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <div class="p-2 border rounded bg-light text-center">
+                                <div class="text-muted small fw-bold uppercase">Total BOM Entries</div>
+                                <div class="fs-4 fw-bold text-dark font-monospace">${total}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 border rounded bg-success bg-opacity-10 text-center border-success">
+                                <div class="text-success small fw-bold uppercase">Verified Clean Parts</div>
+                                <div class="fs-4 fw-bold text-success font-monospace">${clean} (${total > 0 ? Math.round((clean/total)*100) : 0}%)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 border rounded bg-danger bg-opacity-10 text-center border-danger">
+                                <div class="text-danger small fw-bold uppercase">Parameter Mismatches</div>
+                                <div class="fs-4 fw-bold text-danger font-monospace">${mismatch} (${total > 0 ? Math.round((mismatch/total)*100) : 0}%)</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="p-2 border rounded bg-secondary bg-opacity-10 text-center border-secondary">
+                                <div class="text-secondary small fw-bold uppercase">Unverified / Not Found</div>
+                                <div class="fs-4 fw-bold text-dark font-monospace">${notFound} (${total > 0 ? Math.round((notFound/total)*100) : 0}%)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Critical Risk Summary Table -->
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm mb-0 align-middle" style="font-size:0.79rem;">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 140px;">Criticality Level</th>
+                                    <th style="width: 90px;" class="text-center">Count</th>
+                                    <th>Observed Critical Observations & Sourcing Impact</th>
+                                    <th style="width: 220px;">Recommended Engineering Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-danger text-white"><i class="bi bi-x-octagon-fill me-1"></i>High Risk</span>
+                                    </td>
+                                    <td class="text-center fw-bold font-monospace">${highRiskItems.length}</td>
+                                    <td>
+                                        ${highRiskItems.length > 0 
+                                            ? `Components like <code>${highRiskItems.slice(0, 3).map(x => x.fetched.mpn).join(', ')}</code> could not be found in active distributor catalogs or EIA databases. Risk of obsolete parts or invalid part numbers.`
+                                            : `<span class="text-success fw-semibold">No critical unverified part numbers detected. All MPNs match active distributor catalogs.</span>`}
+                                    </td>
+                                    <td>
+                                        ${highRiskItems.length > 0 
+                                            ? `<span class="text-danger fw-bold">Manual engineering review required before fab release. Verify manufacturer spelling or part suffix.</span>`
+                                            : `<span class="text-success">Ready for fabrication sourcing.</span>`}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i>Medium Risk</span>
+                                    </td>
+                                    <td class="text-center fw-bold font-monospace">${medRiskItems.length}</td>
+                                    <td>
+                                        ${medRiskItems.length > 0 
+                                            ? `Parameter discrepancies found between engineering BOM and official distributor specs (e.g. package size differences like 0402 vs 0603, or voltage derating ratings).`
+                                            : `<span class="text-success fw-semibold">Zero parameter discrepancies. Component footprints and electrical ratings match 1:1.</span>`}
+                                    </td>
+                                    <td>
+                                        ${medRiskItems.length > 0 
+                                            ? `<span class="text-warning-emphasis fw-bold">Review highlighted red cells in audit table below to verify PCB footprint matches schematic.</span>`
+                                            : `<span class="text-success">No footprint correction needed.</span>`}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-success text-white"><i class="bi bi-check-circle-fill me-1"></i>Second Source</span>
+                                    </td>
+                                    <td class="text-center fw-bold font-monospace">${records.filter(r => r.alternates && r.alternates.length > 0).length}</td>
+                                    <td>
+                                        Second-source cross-manufacturer replacement parts strictly verified and suggested from competing manufacturers (excluding the entered manufacturer to avoid vendor lock-in).
+                                    </td>
+                                    <td>
+                                        <span class="text-success fw-bold">Approved for multi-vendor supply chain redundancy.</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Quick Action Bar -->
+                    <div class="mt-3 d-flex justify-content-between align-items-center">
+                        <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Full row-by-row parameter comparison with working links is detailed in the table below.</small>
+                        <button class="btn btn-sm btn-success fw-bold px-3 shadow-sm" onclick="BulkBomEngine.exportVerifiedBOM()">
+                            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Download Original BOM + Alternates (.xlsx)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        summaryArea.classList.remove('d-none');
+    },
+
+    // 9. Verified Multi-Vendor BOM Excel Exporter (Original BOM + Added Alternate Columns)
+    exportVerifiedBOM() {
+        const records = ComponentAgent.state.auditRecords;
+        if (!records || records.length === 0) {
+            alert("No audit records available to export.");
+            return;
         }
 
-        function clearResults() {
-            currentAuditData = [];
-            clearInputs();
-            document.getElementById('resultsCard').classList.add('d-none');
-        }
-    </script>
-</body>
-</html>
+        const curr = ComponentAgent.state.currency;
+        const originalHeaders = this.state.originalHeaders;
+
+        // Construct rows: 100% of Original BOM Columns PRESERVED + New Audit & Alternate Columns Added
+        const exportRows = records.map(r => {
+            const rowObj = {};
+            const origRowData = r.originalRowData || [];
+
+            // 1. Copy over every single original BOM cell exactly as uploaded
+            originalHeaders.forEach((colName, colIdx) => {
+                const headerKey = String(colName || `Column_${colIdx + 1}`).trim();
+                rowObj[headerKey] = origRowData[colIdx] !== undefined ? origRowData[colIdx] : "";
+            });
+
+            const f = r.fetched;
+            const alts = r.alternates || [];
+
+            // 2. Append Verified Audit & Alternate Columns
+            rowObj["[AUDIT] Status"] = r.status;
+            rowObj["[AUDIT] Discrepancies / Mistakes"] = r.evaluation.mismatches.join("; ") || "None (100% Match)";
+            rowObj[`[AUDIT] Unit Price (${curr})`] = ComponentAgent.currencyUtils.formatPrice(f.priceUsd);
+            rowObj["[AUDIT] Verified Primary Source"] = f.primarySource;
+            rowObj["[AUDIT] Official Information Link"] = f.productUrl || "N/A";
+
+            // Alternate 1
+            rowObj["Alternate 1: MFG_PN"] = alts[0] ? alts[0].mpn : "None";
+            rowObj["Alternate 1: MFG_NAME"] = alts[0] ? alts[0].mfr : "None";
+            rowObj["Alternate 1: Verified Specs"] = alts[0] ? alts[0].specs : "None";
+            rowObj[`Alternate 1: Price (${curr})`] = alts[0] ? ComponentAgent.currencyUtils.formatPrice(alts[0].priceUsd) : "—";
+            rowObj["Alternate 1: Link"] = alts[0] ? `https://www.digikey.in/en/products/result?keywords=${encodeURIComponent(alts[0].mpn)}` : "—";
+
+            // Alternate 2
+            rowObj["Alternate 2: MFG_PN"] = alts[1] ? alts[1].mpn : "None";
+            rowObj["Alternate 2: MFG_NAME"] = alts[1] ? alts[1].mfr : "None";
+            rowObj["Alternate 2: Verified Specs"] = alts[1] ? alts[1].specs : "None";
+            rowObj[`Alternate 2: Price (${curr})`] = alts[1] ? ComponentAgent.currencyUtils.formatPrice(alts[1].priceUsd) : "—";
+            rowObj["Alternate 2: Link"] = alts[1] ? `https://www.mouser.in/c/?q=${encodeURIComponent(alts[1].mpn)}` : "—";
+
+            // Alternate 3
+            rowObj["Alternate 3: MFG_PN"] = alts[2] ? alts[2].mpn : "None";
+            rowObj["Alternate 3: MFG_NAME"] = alts[2] ? alts[2].mfr : "None";
+            rowObj["Alternate 3: Verified Specs"] = alts[2] ? alts[2].specs : "None";
+            rowObj[`Alternate 3: Price (${curr})`] = alts[2] ? ComponentAgent.currencyUtils.formatPrice(alts[2].priceUsd) : "—";
+            rowObj["Alternate 3: Link"] = alts[2] ? (alts[2].lcscCode ? `https://www.lcsc.com/product-detail/${alts[2].lcscCode}.html` : `https://www.lcsc.com/search?q=${encodeURIComponent(alts[2].mpn)}`) : "—";
+
+            return rowObj;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(exportRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Verified_BOM_With_Alternates");
+        XLSX.writeFile(wb, `Original_BOM_With_Verified_Alternates_${curr}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    },
+
+    // 10. Download Sample BOM Template
+    downloadDemoTemplate() {
+        const sampleRows = [
+            { "MFG_PN": "STM32F103C8T6", "MFG_NAME": "STMicroelectronics", "Category": "MCU", "Value": "72MHz", "Package": "LQFP-48", "Voltage": "3.3V", "Description": "32-Bit ARM Cortex-M3 MCU" },
+            { "MFG_PN": "GRM188R71H104KA93D", "MFG_NAME": "Murata", "Category": "Capacitor", "Value": "100nF", "Package": "0603", "Voltage": "50V", "Description": "MLCC X7R 0603" },
+            { "MFG_PN": "W25Q128JVSIQ", "MFG_NAME": "Winbond", "Category": "Memory", "Value": "128Mbit", "Package": "SOIC-8", "Voltage": "3.3V", "Description": "Quad-SPI NOR Flash" },
+            { "MFG_PN": "AMS1117-3.3", "MFG_NAME": "Advanced Monolithic Systems", "Category": "Power", "Value": "3.3V", "Package": "SOT-223", "Voltage": "15V", "Description": "1A LDO Voltage Regulator" },
+            { "MFG_PN": "BSS138", "MFG_NAME": "onsemi", "Category": "Discrete", "Value": "220mA", "Package": "SOT-23", "Voltage": "50V", "Description": "N-Channel Logic Level MOSFET" }
+        ];
+        const ws = XLSX.utils.json_to_sheet(sampleRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "BOM_Template");
+        XLSX.writeFile(wb, "Hardware_Design_Guide_BOM_Template.xlsx");
+    }
+};
+
+// Global Event Listeners for Export & Table Filter
+window.addEventListener('exportBOM', () => {
+    BulkBomEngine.exportVerifiedBOM();
+});
+
+window.addEventListener('filterTable', (e) => {
+    const q = (e.detail || '').toLowerCase();
+    const rows = document.querySelectorAll('#auditTableBody tr');
+    rows.forEach(tr => {
+        tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
+    });
+});
+
+// Auto-Initialize on Load
+window.addEventListener('DOMContentLoaded', () => {
+    BulkBomEngine.init();
+});
+</script>
